@@ -16,7 +16,9 @@ from fastapi import FastAPI
 from helm.config import get_settings
 from helm.logging import configure_logging
 from helm.middleware import CorrelationIdMiddleware
+from helm.routes import approvals as approvals_routes
 from helm.routes import auth as auth_routes
+from helm.routes import businesses as businesses_routes
 from helm.routes import chat as chat_routes
 from helm.routes import health as health_routes
 from helm.routes import kill_switch as kill_switch_routes
@@ -61,6 +63,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_routes.router)
     app.include_router(chat_routes.router)
     app.include_router(kill_switch_routes.router)
+    app.include_router(businesses_routes.router)
+    app.include_router(approvals_routes.router)
     return app
 
 

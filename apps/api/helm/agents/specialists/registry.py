@@ -7,4 +7,8 @@ should `import helm.agents.specialists.registry`.
 
 from __future__ import annotations
 
-from helm.agents.specialists import idea_scout, stubs  # noqa: F401 — import-for-side-effect
+from helm.agents.specialists import (  # noqa: F401 — import-for-side-effect
+    creative_director,
+    idea_scout,
+    stubs,
+)

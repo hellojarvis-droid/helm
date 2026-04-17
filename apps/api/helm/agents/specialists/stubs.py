@@ -27,16 +27,7 @@ _STUBS = [
         ),
         online_in="Session 3",
     ),
-    StubSpecialist(
-        name="creative_director",
-        persona_note="Creative Director",
-        what_i_would_do=(
-            "generate a brand kit (logo, palette, type pairing, voice), write "
-            "product copy that's benefit-led, and produce 3-5 static + video "
-            "ad variants with captions burned in"
-        ),
-        online_in="Session 3",
-    ),
+    # creative_director is now a real specialist — see specialists/creative_director.py
     StubSpecialist(
         name="ads_operator",
         persona_note="Ads Operator",

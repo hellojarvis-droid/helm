@@ -1,14 +1,15 @@
 """CEO Agent's tools.
 
-Session 2 tools:
+Tools the CEO Agent can invoke mid-turn:
   - get_current_time (trivial)
   - query_event_log (read-only, scope: current session)
   - delegate_to_specialist (the orchestrator primitive)
   - request_user_approval (insert row + emit SSE event)
+  - create_business (insert businesses row, after approval)
 
 Every tool implementation takes a `ToolContext` carrying the tenant scope, the
 DB session, and an output list for side-channel SSE events (used by the
-approval tool). This replaces the Session 1 signature (db, session_id, args).
+approval tool).
 """
 
 from __future__ import annotations
@@ -21,8 +22,10 @@ from typing import TYPE_CHECKING, Any, Protocol
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.agents.specialists.base import invoke as invoke_specialist
-from helm.db.models import Approval
+from helm.db.models import Approval, Business
 from helm.services import event_log
+
+_VERTICALS = {"dtc_physical", "dtc_pod", "saas", "services"}
 
 if TYPE_CHECKING:
     from helm.agents.runtime import ChatEvent
@@ -118,6 +121,43 @@ CEO_TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": ["specialist_name", "task"],
+        },
+    },
+    {
+        "name": "create_business",
+        "description": (
+            "Create a new business row for this user. CLAUDE.md requires approval "
+            "before opening a new business — you MUST call request_user_approval FIRST "
+            "and confirm an approval_granted event in the log before invoking this tool.\n\n"
+            "Returns {business_id, name, vertical, status}. Once created, you typically "
+            "follow up by delegating to creative_director with a brand-kit task and, "
+            "when online, product_builder to stand up the storefront."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Short, memorable business name (1-120 chars).",
+                    "minLength": 1,
+                    "maxLength": 120,
+                },
+                "vertical": {
+                    "type": "string",
+                    "enum": sorted(_VERTICALS),
+                    "description": "Business vertical. Most will be 'dtc_physical'.",
+                },
+                "weekly_spend_cap_cents": {
+                    "type": "integer",
+                    "description": (
+                        "Hard weekly spending cap the Stripe Issuing card will enforce. "
+                        "Default $500 = 50000 cents. Raise with explicit approval only."
+                    ),
+                    "minimum": 0,
+                    "maximum": 10000000,
+                },
+            },
+            "required": ["name", "vertical"],
         },
     },
     {
@@ -279,11 +319,58 @@ async def _request_user_approval(ctx: ToolContext, args: dict[str, Any]) -> dict
     }
 
 
+async def _create_business(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    name = args.get("name")
+    vertical = args.get("vertical")
+    if not isinstance(name, str) or not name.strip():
+        return {"status": "error", "summary": "name is required"}
+    if vertical not in _VERTICALS:
+        return {
+            "status": "error",
+            "summary": f"vertical must be one of {sorted(_VERTICALS)}",
+        }
+
+    cap = int(args.get("weekly_spend_cap_cents", 50000))
+    biz = Business(
+        user_id=ctx.user_id,
+        name=name.strip(),
+        vertical=vertical,
+        weekly_spend_cap_cents=cap,
+        status="initializing",
+    )
+    ctx.db.add(biz)
+    await ctx.db.commit()
+    await ctx.db.refresh(biz)
+
+    await event_log.write(
+        ctx.db,
+        session_id=ctx.session_id,
+        business_id=biz.id,
+        event_type="business_created",
+        agent_name="ceo_agent",
+        payload={
+            "business_id": str(biz.id),
+            "name": biz.name,
+            "vertical": biz.vertical,
+            "weekly_spend_cap_cents": biz.weekly_spend_cap_cents,
+        },
+    )
+    return {
+        "status": "ok",
+        "business_id": str(biz.id),
+        "name": biz.name,
+        "vertical": biz.vertical,
+        "status_field": biz.status,
+        "weekly_spend_cap_cents": biz.weekly_spend_cap_cents,
+    }
+
+
 CEO_TOOL_IMPLS: dict[str, ToolFn] = {
     "get_current_time": _get_current_time,
     "query_event_log": _query_event_log,
     "delegate_to_specialist": _delegate_to_specialist,
     "request_user_approval": _request_user_approval,
+    "create_business": _create_business,
 }
 
 
