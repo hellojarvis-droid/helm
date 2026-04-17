@@ -1,10 +1,10 @@
-"""Creative Director — brand kit generation (text-only for Session 3).
+"""Creative Director — brand kit generation + iterative refinement.
 
-Single-shot Sonnet 4.6 call: given a business concept + constraints, returns
-a JSON brand kit (palette, typography, voice, logo concept). The result is
-persisted to `businesses.brand_kit` JSONB by the caller (via `create_business`
-or a follow-up update). Image generation arrives once the image-gen pipeline
-is wired.
+If the business already has a `brand_kit` (loaded into the BusinessContext by
+`_hydrate_context`), the prompt is framed as "here's the current kit, refine
+only what the user asked" rather than a blank-slate generation. The result
+still parses to the same JSON shape; the runtime's caller is responsible for
+persisting to `businesses.brand_kit`.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.agents.specialists.base import (
@@ -22,6 +23,7 @@ from helm.agents.specialists.base import (
     SpecialistResult,
     register,
 )
+from helm.db.models import Business
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "creative_director.md"
 
@@ -51,13 +53,16 @@ class CreativeDirectorSpecialist(LLMSpecialist):
         ctx: BusinessContext,
         task: str,
     ) -> SpecialistResult:
-        base_result = await super().run(db, ctx, task)
+        # If a kit already exists, hand it to the model as context so we
+        # refine rather than regenerate — preserves naming/palette continuity
+        # when the user asks for "just a tweaked voice" or similar.
+        framed_task = _frame_task(task, ctx)
+        base_result = await super().run(db, ctx, framed_task)
         if base_result.status != "ok":
             return base_result
 
         parsed = _extract_brand_kit(base_result.summary)
         if parsed is None:
-            # Surface as error so the CEO can ask for a retry with clearer constraints.
             return SpecialistResult(
                 specialist=self.name,
                 status="error",
@@ -69,14 +74,22 @@ class CreativeDirectorSpecialist(LLMSpecialist):
                 cost_cents=base_result.cost_cents,
             )
 
-        # Short human-readable summary for the CEO to relay; full kit in metadata.
+        # Persist to businesses.brand_kit when we have a business to update.
+        if ctx.business_id is not None and db is not None:
+            await db.execute(
+                update(Business).where(Business.id == ctx.business_id).values(brand_kit=parsed)
+            )
+            await db.commit()
+
         name = parsed.get("name", "(no name)")
         tagline = parsed.get("tagline", "")
         palette_preview = ", ".join(f"{k}: {v}" for k, v in (parsed.get("palette") or {}).items())[
             :200
         ]
+        refined = bool(ctx.brand_kit)
+        verb = "refined" if refined else "ready"
         summary_line = (
-            f"Brand kit ready for '{name}'. Tagline: \"{tagline}\". Palette: {palette_preview}."
+            f"Brand kit {verb} for '{name}'. Tagline: \"{tagline}\". Palette: {palette_preview}."
         )
         return SpecialistResult(
             specialist=self.name,
@@ -85,9 +98,29 @@ class CreativeDirectorSpecialist(LLMSpecialist):
             metadata={
                 **base_result.metadata,
                 "brand_kit": parsed,
+                "refined": refined,
             },
             cost_cents=base_result.cost_cents,
         )
+
+
+def _frame_task(task: str, ctx: BusinessContext) -> str:
+    """Wrap the task with context the model needs.
+
+    Fresh generation: task only.
+    Refinement: include the current kit as JSON, instruct to preserve what
+    wasn't asked to change. Including the kit at the top keeps it cache-warm
+    across refinement calls on the same business.
+    """
+    if not ctx.brand_kit:
+        return task
+    header = (
+        "You are refining an existing brand kit. The CURRENT KIT is below; "
+        "preserve every field the user did not explicitly ask to change. "
+        "Return the FULL updated kit JSON (not a diff).\n\n"
+        f"CURRENT KIT:\n```json\n{json.dumps(ctx.brand_kit, indent=2)}\n```\n\n"
+    )
+    return header + f"USER'S REQUEST:\n{task}"
 
 
 def _extract_brand_kit(text: str) -> dict[str, Any] | None:

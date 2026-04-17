@@ -16,14 +16,16 @@ Contract:
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 import anthropic
 from anthropic.types import MessageParam, ToolUnionParam
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.config import get_settings
+from helm.db.models import AgentEvent, Business, Integration
 from helm.services import event_log
 
 # Token costs per million (keep in sync with runtime._cost_cents).
@@ -38,12 +40,21 @@ _COSTS = {
 class BusinessContext:
     """The slice of tenant + business state every specialist receives.
 
-    Session 2 passes only the identifiers — Session 3 will enrich this with the
-    full brand_kit, recent events, memories, etc. per AGENTS.md §11.
+    Session 5 hydrates this from DB before `invoke()` runs the specialist —
+    so Creative Director can refine an existing brand kit, Idea Scout can see
+    past event summaries, etc. See AGENTS.md §11 for the full spec.
+
+    Cross-business / orchestrator-level invocations leave business_id=None,
+    in which case brand_kit + connected_integrations default to empty.
     """
 
     user_id: uuid.UUID
     business_id: uuid.UUID | None
+    business_name: str = ""
+    vertical: str = ""
+    brand_kit: dict[str, Any] = field(default_factory=dict)
+    connected_integrations: tuple[str, ...] = ()
+    recent_events: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +206,83 @@ class StubSpecialist:
         )
 
 
+async def _hydrate_context(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    business_id: uuid.UUID | None,
+    session_id: uuid.UUID,
+) -> BusinessContext:
+    """Load the business + its brand_kit + active integrations + recent events
+    into a `BusinessContext` so specialists have the state they need without
+    going to DB themselves.
+
+    Orchestrator-level calls (business_id=None) get a minimal context with the
+    last 20 events on the session so Idea Scout et al. can see prior exchanges.
+    """
+    name = ""
+    vertical = ""
+    brand_kit: dict[str, Any] = {}
+    integrations: tuple[str, ...] = ()
+
+    if business_id is not None:
+        biz_row = await db.execute(
+            select(Business).where(Business.id == business_id, Business.user_id == user_id)
+        )
+        biz = biz_row.scalar_one_or_none()
+        if biz is not None:
+            name = biz.name
+            vertical = biz.vertical
+            brand_kit = dict(biz.brand_kit or {})
+
+        integ_rows = (
+            (
+                await db.execute(
+                    select(Integration.toolkit).where(
+                        Integration.business_id == business_id,
+                        Integration.status == "active",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        integrations = tuple(integ_rows)
+
+    # Recent events — last 20 on this session, newest first. Trimmed to the
+    # fields a specialist actually needs (type + agent + short payload summary).
+    event_rows = (
+        (
+            await db.execute(
+                select(AgentEvent)
+                .where(AgentEvent.session_id == session_id)
+                .order_by(AgentEvent.created_at.desc())
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    events = tuple(
+        {
+            "timestamp": ev.created_at.isoformat(),
+            "event_type": ev.event_type,
+            "agent_name": ev.agent_name,
+            "payload": dict(list(ev.payload.items())[:3]),
+        }
+        for ev in event_rows
+    )
+
+    return BusinessContext(
+        user_id=user_id,
+        business_id=business_id,
+        business_name=name,
+        vertical=vertical,
+        brand_kit=brand_kit,
+        connected_integrations=integrations,
+        recent_events=events,
+    )
+
+
 # ────────────────────────────────────────────────────────────────────
 # Registry — the CEO dispatches through this.
 # ────────────────────────────────────────────────────────────────────
@@ -237,7 +325,7 @@ async def invoke(
             cost_cents=0,
         )
 
-    ctx = BusinessContext(user_id=user_id, business_id=business_id)
+    ctx = await _hydrate_context(db, user_id, business_id, session_id)
     try:
         result = await specialist.run(db, ctx, task)
     except anthropic.APIError as e:
