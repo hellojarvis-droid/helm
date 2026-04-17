@@ -1,0 +1,55 @@
+# Node
+node_modules/
+.pnpm-store/
+.pnpm-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Turbo / bundlers
+.turbo/
+.next/
+out/
+
+# Env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE / OS
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+
+# Secrets that should never touch the repo
+*.pem
+*.p8
+*.p12
+apns-key.p8
+fcm-service-account.json
+
+# Logs
+logs/
+*.log

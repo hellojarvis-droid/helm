@@ -1,0 +1,19 @@
+node_modules
+.pnpm-store
+.turbo
+.next
+dist
+build
+.venv
+**/.venv
+**/__pycache__
+**/.ruff_cache
+**/.mypy_cache
+**/alembic/versions
+pnpm-lock.yaml
+
+# Source-of-truth specs — preserved verbatim from the build kit.
+# Prettier reflow can subtly change table/bullet semantics; we never touch these
+# via a formatter. Hand-edit only.
+CLAUDE.md
+docs/**/*.md

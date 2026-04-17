@@ -1,0 +1,31 @@
+{
+  "name": "helm",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.2",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yml,yaml}\"",
+    "api:dev": "cd apps/api && uv run uvicorn helm.main:app --reload --port 8000",
+    "api:test": "cd apps/api && uv run pytest",
+    "api:lint": "cd apps/api && uv run ruff check .",
+    "api:format": "cd apps/api && uv run ruff format .",
+    "api:typecheck": "cd apps/api && uv run mypy helm",
+    "migrate": "cd apps/api && uv run alembic upgrade head",
+    "migrate:new": "cd apps/api && uv run alembic revision --autogenerate -m"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}

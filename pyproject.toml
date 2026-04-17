@@ -1,0 +1,53 @@
+[project]
+name = "helm-workspace"
+version = "0.0.0"
+description = "Helm — the agent-native platform for serial entrepreneurs"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["apps/api"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "W",   # pycodestyle warnings
+  "I",   # isort
+  "N",   # pep8-naming
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "SIM", # flake8-simplify
+  "RUF", # ruff-specific
+  "ASYNC",
+]
+ignore = [
+  "E501",  # line too long (black handles)
+  "B008",  # function call in default arg (FastAPI's Depends)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["N806", "N803"]
+"alembic/**" = ["N"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["alembic/versions", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["pgvector.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["apps/api/tests"]
+python_files = ["test_*.py"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]

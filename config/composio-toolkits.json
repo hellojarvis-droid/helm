@@ -1,0 +1,198 @@
+{
+  "$comment": "Canonical list of Composio toolkits Helm enables. Agents reference this to know what's available. Update when enabling new toolkits.",
+  "version": "1.0.0",
+  "toolkits": {
+    "commerce": {
+      "SHOPIFY": {
+        "scopes": [
+          "write_products",
+          "write_orders",
+          "write_customers",
+          "read_reports",
+          "write_payments",
+          "write_marketing_events"
+        ],
+        "required_for_agents": ["product_builder", "customer_service", "finance_ops"],
+        "per_business": true
+      },
+      "STRIPE": {
+        "$comment": "Read-only via Composio. Writes go through our direct Stripe integration for Issuing/Connect.",
+        "scopes": ["read"],
+        "required_for_agents": ["finance_ops"],
+        "per_business": true
+      },
+      "PRINTFUL": {
+        "required_for_agents": ["product_builder"],
+        "per_business": true
+      },
+      "CJ_DROPSHIPPING": {
+        "required_for_agents": ["product_builder"],
+        "per_business": true
+      }
+    },
+    "marketing_ads": {
+      "META_ADS": {
+        "scopes": ["ads_management", "ads_read", "business_management", "pages_manage_ads"],
+        "required_for_agents": ["ads_operator", "creative_director"],
+        "per_business": true
+      },
+      "GOOGLE_ADS": {
+        "required_for_agents": ["ads_operator"],
+        "per_business": true
+      },
+      "TIKTOK_ADS": {
+        "required_for_agents": ["ads_operator"],
+        "per_business": true
+      },
+      "KLAVIYO": {
+        "required_for_agents": ["ads_operator", "customer_service"],
+        "per_business": true
+      },
+      "GOOGLE_ANALYTICS": {
+        "scopes": ["read"],
+        "required_for_agents": ["growth_analyst"],
+        "per_business": true
+      }
+    },
+    "social_organic": {
+      "INSTAGRAM": {
+        "required_for_agents": ["social_engagement", "creative_director"],
+        "per_business": true
+      },
+      "TIKTOK": {
+        "required_for_agents": ["social_engagement", "creative_director", "idea_scout"],
+        "per_business": true
+      },
+      "X_TWITTER": {
+        "required_for_agents": ["social_engagement"],
+        "per_business": true
+      },
+      "LINKEDIN": {
+        "required_for_agents": ["social_engagement"],
+        "per_business": true
+      },
+      "THREADS": {
+        "required_for_agents": ["social_engagement"],
+        "per_business": true
+      },
+      "PINTEREST": {
+        "required_for_agents": ["social_engagement"],
+        "per_business": true
+      }
+    },
+    "creative_generation": {
+      "NANO_BANANA": {
+        "$comment": "Photorealistic image generation",
+        "required_for_agents": ["creative_director", "product_builder"],
+        "per_business": false
+      },
+      "VEO3": {
+        "$comment": "Video generation",
+        "required_for_agents": ["creative_director"],
+        "per_business": false
+      },
+      "ELEVENLABS": {
+        "$comment": "Voice generation for video",
+        "required_for_agents": ["creative_director"],
+        "per_business": false
+      },
+      "FIGMA": {
+        "required_for_agents": ["creative_director"],
+        "per_business": false
+      }
+    },
+    "customer_service": {
+      "GORGIAS": {
+        "required_for_agents": ["customer_service"],
+        "per_business": true
+      },
+      "INTERCOM": {
+        "required_for_agents": ["customer_service"],
+        "per_business": true
+      }
+    },
+    "finance_accounting": {
+      "QUICKBOOKS": {
+        "required_for_agents": ["finance_ops"],
+        "per_business": true
+      },
+      "XERO": {
+        "required_for_agents": ["finance_ops"],
+        "per_business": true
+      }
+    },
+    "domain_dns": {
+      "NAMECHEAP": {
+        "required_for_agents": ["product_builder"],
+        "per_business": false
+      },
+      "CLOUDFLARE": {
+        "required_for_agents": ["product_builder"],
+        "per_business": false
+      }
+    },
+    "research": {
+      "REDDIT": {
+        "required_for_agents": ["idea_scout"],
+        "per_business": false
+      },
+      "WEB_SEARCH": {
+        "required_for_agents": ["idea_scout", "ceo_agent", "growth_analyst"],
+        "per_business": false
+      },
+      "HACKERNEWS": {
+        "required_for_agents": ["idea_scout"],
+        "per_business": false
+      },
+      "PRODUCT_HUNT": {
+        "required_for_agents": ["idea_scout"],
+        "per_business": false
+      }
+    },
+    "productivity_user_surface": {
+      "$comment": "For the user's own workflows, integrating with their existing tools. Not core agent operation.",
+      "GMAIL": {
+        "per_business": true,
+        "optional": true
+      },
+      "GOOGLE_CALENDAR": {
+        "per_business": false,
+        "optional": true
+      },
+      "SLACK": {
+        "per_business": false,
+        "optional": true
+      },
+      "NOTION": {
+        "per_business": true,
+        "optional": true
+      }
+    }
+  },
+  "agent_toolkit_map": {
+    "$comment": "Quick lookup: which toolkits each agent gets by default",
+    "ceo_agent": ["WEB_SEARCH"],
+    "idea_scout": ["WEB_SEARCH", "REDDIT", "TIKTOK", "HACKERNEWS", "PRODUCT_HUNT"],
+    "product_builder": [
+      "SHOPIFY",
+      "NAMECHEAP",
+      "CLOUDFLARE",
+      "PRINTFUL",
+      "CJ_DROPSHIPPING",
+      "NANO_BANANA"
+    ],
+    "creative_director": ["NANO_BANANA", "VEO3", "ELEVENLABS", "FIGMA", "INSTAGRAM", "TIKTOK"],
+    "ads_operator": ["META_ADS", "GOOGLE_ADS", "TIKTOK_ADS", "KLAVIYO"],
+    "social_engagement": ["INSTAGRAM", "TIKTOK", "X_TWITTER", "LINKEDIN", "THREADS", "PINTEREST"],
+    "customer_service": ["GORGIAS", "INTERCOM", "SHOPIFY"],
+    "finance_ops": ["STRIPE", "QUICKBOOKS", "XERO", "SHOPIFY"],
+    "growth_analyst": [
+      "GOOGLE_ANALYTICS",
+      "STRIPE",
+      "SHOPIFY",
+      "META_ADS",
+      "GOOGLE_ADS",
+      "TIKTOK_ADS"
+    ]
+  }
+}
