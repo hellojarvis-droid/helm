@@ -13,15 +13,30 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve the monorepo root from this file's location (apps/api/helm/config.py),
-# so env files load correctly regardless of the current working directory
-# (CI runs from apps/api; alembic from apps/api; scripts from anywhere).
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+def _env_files() -> tuple[str, ...]:
+    """Absolute paths to the root .env + .env.local, best-effort.
+
+    In a local checkout the module is at `apps/api/helm/config.py`, so
+    `parents[3]` resolves to the repo root and we pick up `.env.local`
+    regardless of the CWD the process was launched from (uvicorn from
+    `apps/api`, alembic from `apps/api`, scripts from anywhere).
+
+    In the Docker image `WORKDIR=/app` and the module is at `/app/helm/config.py`
+    — only 2 parents exist. We return `()` in that case; Render, Fly, and
+    other container hosts inject env vars directly into the process env,
+    which pydantic-settings reads without needing a file.
+    """
+    try:
+        root = Path(__file__).resolve().parents[3]
+    except IndexError:
+        return ()
+    return tuple(str(root / name) for name in (".env", ".env.local"))
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(str(_REPO_ROOT / ".env"), str(_REPO_ROOT / ".env.local")),
+        env_file=_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
