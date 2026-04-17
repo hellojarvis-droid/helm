@@ -17,7 +17,6 @@ import sys
 
 import httpx
 
-
 API_BASE = os.environ.get("HELM_API_BASE", "http://localhost:8000").rstrip("/")
 JWT = os.environ.get("HELM_JWT", "")
 
