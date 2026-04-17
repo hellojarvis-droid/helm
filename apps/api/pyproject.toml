@@ -19,6 +19,8 @@ dependencies = [
   "redis>=5.2.1",
   "python-multipart>=0.0.20",
   "langfuse>=2.56.0",
+  "anthropic>=0.40.0",
+  "composio>=0.8.0",
 ]
 
 [dependency-groups]
