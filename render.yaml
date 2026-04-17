@@ -1,0 +1,48 @@
+# Render Blueprint for Helm.
+# Connect the GitHub repo to Render, point it at this file, and Render provisions
+# the service. Secrets (SUPABASE_*, STRIPE_*, ANTHROPIC_API_KEY, SENTRY_DSN) are
+# set in the Render dashboard, NOT here — never commit secrets.
+
+services:
+  - type: web
+    name: helm-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    branch: main
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: staging
+      - key: LOG_LEVEL
+        value: info
+      - key: API_BASE_URL
+        value: https://helm-api.onrender.com
+      - key: WEB_BASE_URL
+        value: https://helm.app
+      # Secrets — set these in the Render dashboard, not in this file.
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COMPOSIO_API_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
