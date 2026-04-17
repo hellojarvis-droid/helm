@@ -1,21 +1,23 @@
 """Agent runtime — Messages-API implementation.
 
-Phase 1 Session 1 ships this single runtime (`MessagesRuntime`) built on
-Anthropic's Messages API with tool use and a hand-rolled conversation-history
-loader. This is the simplest correct version that ships the chat loop
-end-to-end.
+MessagesRuntime drives Claude's stable Messages API with:
+  - server-side text streaming (token-by-token text_delta events)
+  - a local tool-use loop (server stops with stop_reason='tool_use', we
+    execute the tool, feed the result back, loop)
+  - specialist delegation (the `delegate_to_specialist` tool reaches into
+    `helm.agents.specialists.base.invoke`)
+  - kill-switch checks before every LLM call AND every tool call
+  - full event-sourcing: every user msg, agent response, tool_call, tool_result,
+    approval_requested gets a row in `agent_events`
 
-Phase 1 Session 2 will add a `ManagedAgentsRuntime` that uses `client.beta.
-agents` + `client.beta.sessions` for Anthropic-managed state. Both
-implementations will speak the same `ChatEvent` stream shape below, so the
-FastAPI route doesn't care which one runs.
+A `ManagedAgentsRuntime` (client.beta.agents + sessions) can later plug in
+behind the same `ChatEvent` interface; the route code doesn't care which runs.
 
-Invariants (enforced here, not on callers):
-  1. Every tool call is guarded by `kill_switch.assert_not_set` BEFORE execute.
-  2. Every user message + agent response + tool_call + tool_result is logged
-     to `agent_events`.
-  3. The conversation history sent to Claude is rebuilt from the event log on
-     each turn — we don't keep anything in process memory.
+Invariants:
+  1. `kill_switch.assert_not_set` runs before every LLM call and every tool call.
+  2. `agent_events` captures every turn-relevant action.
+  3. History sent to Claude on each turn is rebuilt from `agent_events` — the
+     process holds no conversation state across requests.
 """
 
 from __future__ import annotations
@@ -29,27 +31,29 @@ from typing import Any, Literal, cast
 
 import anthropic
 import structlog
-from anthropic.types import MessageParam, ToolParam
+from anthropic.types import MessageParam, RawContentBlockDeltaEvent, TextDelta, ToolUnionParam
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from helm.agents.tools import CEO_TOOL_IMPLS, CEO_TOOLS
+# Side-effect: registering every specialist at module load so `delegate_to_specialist`
+# can find them without further wiring.
+import helm.agents.specialists.registry  # noqa: F401
+from helm.agents.tools import CEO_TOOL_IMPLS, CEO_TOOLS, ToolContext
 from helm.config import get_settings
 from helm.db.models import AgentEvent
 from helm.services import event_log, kill_switch
 
 log = structlog.get_logger("helm.runtime")
 
-# Anthropic model IDs (per system prompt/ARCHITECTURE.md non-negotiables).
 _CEO_MODEL = "claude-opus-4-7"
 _MAX_TOKENS = 8192
-_MAX_TOOL_ITERATIONS = 6  # Prevents runaway loops; plenty for any one user turn.
+_MAX_TOOL_ITERATIONS = 6
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 # ────────────────────────────────────────────────────────────────────
-# Public event shape — the runtime emits these; the route streams them to SSE.
+# Public event shape
 # ────────────────────────────────────────────────────────────────────
 
 
@@ -58,6 +62,7 @@ EventKind = Literal[
     "text_delta",
     "tool_call",
     "tool_result",
+    "approval_requested",
     "turn_cost",
     "done",
     "error",
@@ -70,8 +75,9 @@ class ChatEvent:
     data: dict[str, Any]
 
     def to_sse(self) -> str:
-        """Serialize as an SSE `data:` line."""
-        payload = json.dumps({"kind": self.kind, **self.data}, default=str)
+        # Event kind is the source of truth; put it last so data keys named
+        # "kind" (e.g. the approval's own `kind` field) can't clobber it.
+        payload = json.dumps({**self.data, "kind": self.kind}, default=str)
         return f"data: {payload}\n\n"
 
 
@@ -91,8 +97,6 @@ class _TurnState:
 
 
 class MessagesRuntime:
-    """Stateless (per instance) driver that uses the stable Messages API."""
-
     def __init__(self, client: anthropic.AsyncAnthropic | None = None) -> None:
         self._client = client or anthropic.AsyncAnthropic(api_key=get_settings().anthropic_api_key)
         self._system_prompt = (_PROMPTS_DIR / "ceo_agent.md").read_text()
@@ -106,11 +110,6 @@ class MessagesRuntime:
         business_id: uuid.UUID | None,
         user_message: str,
     ) -> AsyncIterator[ChatEvent]:
-        """Run one user→agent turn and stream events.
-
-        Yields `ChatEvent` instances end-to-end; the final event is always a
-        `done` (or `error` on failure). The SSE route serializes each.
-        """
         # Always log the user's message first. The event log is the authoritative
         # record of what the user asked — even if the kill switch blocks the
         # response, the user message is in the log and the next turn can see it.
@@ -133,7 +132,45 @@ class MessagesRuntime:
 
             for iteration in range(_MAX_TOOL_ITERATIONS):
                 await kill_switch.assert_not_set(db, user_id)
-                assistant_content, stop_reason = await self._stream_once(state)
+
+                assistant_content: list[dict[str, Any]] = []
+                stop_reason = "end_turn"
+
+                # Stream one LLM call. Yield text deltas as they arrive;
+                # collect the final assembled message for logging + tool routing.
+                async with self._client.messages.stream(
+                    model=_CEO_MODEL,
+                    max_tokens=_MAX_TOKENS,
+                    system=self._system_prompt,
+                    tools=cast("list[ToolUnionParam]", CEO_TOOLS),
+                    messages=cast("list[MessageParam]", state.messages),
+                ) as stream:
+                    async for event in stream:
+                        if isinstance(event, RawContentBlockDeltaEvent) and isinstance(
+                            event.delta, TextDelta
+                        ):
+                            yield ChatEvent("text_delta", {"text": event.delta.text})
+                    final = await stream.get_final_message()
+
+                state.input_tokens += final.usage.input_tokens
+                state.output_tokens += final.usage.output_tokens
+                stop_reason = final.stop_reason or "end_turn"
+
+                for block in final.content:
+                    if block.type == "text":
+                        assistant_content.append({"type": "text", "text": block.text})
+                    elif block.type == "tool_use":
+                        assistant_content.append(
+                            {
+                                "type": "tool_use",
+                                "id": block.id,
+                                "name": block.name,
+                                "input": block.input,
+                            }
+                        )
+                    else:
+                        # web_search_tool_result, etc. — round-trip via model_dump
+                        assistant_content.append({"type": block.type, "raw": block.model_dump()})
 
                 if stop_reason == "end_turn":
                     await self._log_agent_text(db, state, assistant_content)
@@ -188,49 +225,6 @@ class MessagesRuntime:
     # Internals
     # ────────────────────────────────────────────────────────────────
 
-    async def _stream_once(self, state: _TurnState) -> tuple[list[dict[str, Any]], str]:
-        """Stream one LLM call, yielding text deltas via the `.text` side-channel.
-
-        Returns (assistant content blocks, stop_reason). Text deltas are
-        emitted as ChatEvent("text_delta", ...) through a shared generator
-        pattern — since Python async generators can't easily share state with
-        an inner stream context manager, we collect deltas into the caller-
-        owned event buffer via monkey-patching. Keeping it simple here: this
-        helper returns the final content and the caller yields the deltas
-        separately. Streaming text deltas lands in a follow-up polish pass
-        (noted in plan).
-        """
-        # The Anthropic SDK types `tools` + `messages` as TypedDict unions.
-        # Our dicts match those shapes by construction, but mypy can't prove
-        # structural compatibility; cast is the narrowest workaround.
-        response = await self._client.messages.create(
-            model=_CEO_MODEL,
-            max_tokens=_MAX_TOKENS,
-            system=self._system_prompt,
-            tools=cast("list[ToolParam]", CEO_TOOLS),
-            messages=cast("list[MessageParam]", state.messages),
-        )
-        state.input_tokens += response.usage.input_tokens
-        state.output_tokens += response.usage.output_tokens
-
-        # Convert SDK content blocks to plain dicts we can persist + round-trip.
-        content: list[dict[str, Any]] = []
-        for block in response.content:
-            if block.type == "text":
-                content.append({"type": "text", "text": block.text})
-            elif block.type == "tool_use":
-                content.append(
-                    {
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
-                    }
-                )
-            else:
-                content.append({"type": block.type, "raw": block.model_dump()})
-        return content, response.stop_reason or "end_turn"
-
     async def _run_tools(
         self,
         db: AsyncSession,
@@ -258,20 +252,26 @@ class MessagesRuntime:
             yield ChatEvent("tool_call", {"name": name, "input": args})
 
             impl = CEO_TOOL_IMPLS.get(name)
+            tool_ctx = ToolContext(
+                db=db,
+                session_id=state.session_id,
+                user_id=state.user_id,
+                business_id=state.business_id,
+            )
+
             if impl is None:
-                result: dict[str, Any] = {
-                    "error": f"tool '{name}' not implemented in Phase 1 Session 1"
-                }
+                result: dict[str, Any] = {"error": f"tool '{name}' not implemented"}
                 is_error = True
             else:
                 try:
-                    result = await impl(db, state.session_id, args)
-                    is_error = False
-                except Exception as exc:  # surface errors to the model, don't crash the turn
+                    result = await impl(tool_ctx, args)
+                    is_error = bool(result.get("error"))
+                except Exception as exc:  # bubble into model's tool_result, don't crash turn
                     log.exception("tool.failed", name=name)
                     result = {"error": str(exc)[:400]}
                     is_error = True
 
+            # Side-channel events (e.g. approval_requested) flushed after tool_result.
             await event_log.write(
                 db,
                 session_id=state.session_id,
@@ -281,6 +281,9 @@ class MessagesRuntime:
                 business_id=state.business_id,
             )
             yield ChatEvent("tool_result", {"name": name, "is_error": is_error})
+
+            for ev in tool_ctx.events_out:
+                yield ev
 
             tool_results_out.append(
                 {
@@ -295,7 +298,7 @@ class MessagesRuntime:
         self, db: AsyncSession, state: _TurnState, content: list[dict[str, Any]]
     ) -> None:
         text = "".join(b.get("text", "") for b in content if b.get("type") == "text")
-        if not text.strip():
+        if not text.strip() and not any(b.get("type") == "tool_use" for b in content):
             return
         cost_cents = _cost_cents(state.input_tokens, state.output_tokens)
         await event_log.write(
@@ -309,11 +312,6 @@ class MessagesRuntime:
         )
 
     async def _load_history(self, db: AsyncSession, session_id: uuid.UUID) -> list[dict[str, Any]]:
-        """Rebuild the Claude `messages` list from `agent_events`.
-
-        We store the full content-block structure in each agent message's
-        payload, so we can replay tool_use/tool_result turns faithfully.
-        """
         result = await db.execute(
             select(AgentEvent)
             .where(
@@ -336,15 +334,11 @@ class MessagesRuntime:
 
 
 def _cost_cents(input_tokens: int, output_tokens: int) -> int:
-    """Opus 4.7 published rates: $15/M input, $75/M output.
-    Integer cents, rounded up; this matches Anthropic's billing precision."""
-    input_cost = (input_tokens * 15) / 1_000_000
-    output_cost = (output_tokens * 75) / 1_000_000
-    return int((input_cost + output_cost) * 100 + 0.5)
+    """Opus 4.7: $15/M input, $75/M output. Cents, rounded."""
+    cents = (input_tokens * 15 + output_tokens * 75) / 10_000
+    return int(cents + 0.5)
 
 
-# Module-level instance so each request isn't rebuilding an Anthropic client.
-# The client is thread-safe and async-safe; one instance per process is correct.
 _default: MessagesRuntime | None = None
 
 

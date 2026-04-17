@@ -1,19 +1,27 @@
-"""POST /chat — end-to-end with mocked Anthropic + overridden auth.
+"""POST /chat — end-to-end with a stub Anthropic stream + overridden auth.
 
-We don't want unit tests to spend real Anthropic tokens, so the test swaps
-`default_runtime()` for one pointed at a stub async client that returns a
-canned response. Auth is overridden via FastAPI's dependency override.
+Session 2 mock uses messages.stream() instead of messages.create(), emits a
+single text_delta event, and surfaces the final Message via get_final_message().
+Bypasses Pydantic validation via `model_construct` since the real response
+shapes carry extra required fields we don't care about in tests.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 
 import pytest
+from anthropic.types import (
+    Message,
+    RawContentBlockDeltaEvent,
+    TextBlock,
+    TextDelta,
+    ToolUseBlock,
+    Usage,
+)
 from helm.agents import runtime as runtime_module
 from helm.auth import CurrentUser, require_user
 from helm.db.models import AgentEvent, User
@@ -24,45 +32,81 @@ from sqlalchemy import select
 
 from tests.conftest import requires_db
 
-
-@dataclass
-class _StubUsage:
-    input_tokens: int = 12
-    output_tokens: int = 7
+# ────────────────────────────────────────────────────────────────────
+# Mock Anthropic stream client
+# ────────────────────────────────────────────────────────────────────
 
 
-@dataclass
-class _StubBlock:
-    type: str
-    text: str = ""
-    id: str = ""
-    name: str = ""
-    input: dict[str, Any] = field(default_factory=dict)
+def _stub_stream_client(
+    *,
+    text: str = "",
+    tool_uses: list[dict[str, Any]] | None = None,
+    stop_reason: str = "end_turn",
+) -> Any:
+    """Returns an object that mimics AsyncAnthropic for `.messages.stream()` use.
 
-    def model_dump(self) -> dict[str, Any]:
-        return {
-            "type": self.type,
-            "text": self.text,
-            "id": self.id,
-            "name": self.name,
-            "input": self.input,
-        }
+    Second calls (after a tool round-trip) reuse the same configured response —
+    tests should pass a list of responses via `_SequenceStreamClient` for multi-turn.
+    """
+    tool_uses = tool_uses or []
+    content: list[Any] = []
+    if text:
+        content.append(TextBlock(type="text", text=text, citations=None))
+    for tu in tool_uses:
+        content.append(
+            ToolUseBlock(type="tool_use", id=tu["id"], name=tu["name"], input=tu.get("input", {}))
+        )
 
+    final = Message.model_construct(
+        id="msg_test",
+        type="message",
+        role="assistant",
+        model="claude-opus-4-7",
+        content=content,
+        stop_reason=stop_reason,
+        stop_sequence=None,
+        usage=Usage.model_construct(input_tokens=10, output_tokens=5),
+    )
 
-@dataclass
-class _StubResponse:
-    content: list[_StubBlock]
-    stop_reason: str = "end_turn"
-    usage: _StubUsage = field(default_factory=_StubUsage)
+    class _FakeStream:
+        async def __aenter__(self) -> _FakeStream:
+            return self
 
+        async def __aexit__(self, *a: Any) -> None:
+            return None
 
-def _stub_client(response: _StubResponse) -> Any:
-    """An async-mock Anthropic client whose `.messages.create(...)` returns
-    the given response. Matches the surface MessagesRuntime uses."""
-    client = AsyncMock()
-    client.messages = AsyncMock()
-    client.messages.create = AsyncMock(return_value=response)
+        async def __aiter__(self) -> AsyncIterator[Any]:
+            # Emit a single text_delta event if there's text, to exercise streaming path.
+            if text:
+                yield RawContentBlockDeltaEvent.model_construct(
+                    type="content_block_delta",
+                    index=0,
+                    delta=TextDelta.model_construct(type="text_delta", text=text),
+                )
+
+        async def get_final_message(self) -> Message:
+            return final
+
+    client = MagicMock()
+    client.messages = MagicMock()
+    client.messages.stream = MagicMock(return_value=_FakeStream())
     return client
+
+
+class _SequenceStreamClient:
+    """Multi-turn stub: each call to .messages.stream() pops the next response."""
+
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.responses = responses
+        self.call_count = 0
+        self.messages = self  # duck-type `client.messages.stream`
+
+    def stream(self, **kwargs: Any) -> Any:
+        idx = min(self.call_count, len(self.responses) - 1)
+        self.call_count += 1
+        r = self.responses[idx]
+        client = _stub_stream_client(**r)
+        return client.messages.stream()
 
 
 async def _read_sse_events(resp_iter: AsyncIterator[bytes]) -> list[dict[str, Any]]:
@@ -78,23 +122,21 @@ async def _read_sse_events(resp_iter: AsyncIterator[bytes]) -> list[dict[str, An
     return events
 
 
+# ────────────────────────────────────────────────────────────────────
+# Tests
+# ────────────────────────────────────────────────────────────────────
+
+
 @requires_db
 @pytest.mark.asyncio
 async def test_chat_turn_end_to_end(session, monkeypatch) -> None:
-    # Seed a user so /chat's sync_user succeeds.
     user = User(supabase_id="sub-chat-1", email="chat1@example.com", tier="founder")
     session.add(user)
     await session.commit()
 
     fake_user = CurrentUser(supabase_id="sub-chat-1", email="chat1@example.com", raw_claims={})
 
-    # Swap the runtime's anthropic client for a stub.
-    stub = _stub_client(
-        _StubResponse(
-            content=[_StubBlock(type="text", text="hello, founder")],
-            stop_reason="end_turn",
-        )
-    )
+    stub = _stub_stream_client(text="hello, founder", stop_reason="end_turn")
     rt = runtime_module.MessagesRuntime(client=stub)
     monkeypatch.setattr(runtime_module, "_default", rt)
 
@@ -113,20 +155,17 @@ async def test_chat_turn_end_to_end(session, monkeypatch) -> None:
 
     kinds = [e["kind"] for e in events]
     assert kinds[0] == "user_logged"
+    assert "text_delta" in kinds
+    text_events = [e for e in events if e["kind"] == "text_delta"]
+    assert text_events[0]["text"] == "hello, founder"
     assert "turn_cost" in kinds
     assert kinds[-1] == "done"
 
-    # Event log should have user msg + agent msg at minimum.
-    # Open a NEW session here — the one the route used was the request-scoped
-    # session that closed when the response finished. We read through the test's
-    # own `session` fixture.
-    # Ask for all events for this user's CEO session.
+    # Verify persistence of both messages.
     from helm.services.sessions import get_or_create_ceo_session
 
-    # sync_user persisted a user row; fetch it.
     synced = await sync_user_from_supabase(session, fake_user)
     ceo = await get_or_create_ceo_session(session, synced.id)
-
     rows = (
         (
             await session.execute(
@@ -161,9 +200,7 @@ async def test_chat_returns_error_when_kill_switch_is_on(session, monkeypatch) -
     kill_switch._invalidate_cache_for_tests()
 
     fake_user = CurrentUser(supabase_id="sub-chat-2", email="chat2@example.com", raw_claims={})
-
-    # Stub won't be called since kill switch fires first.
-    stub = _stub_client(_StubResponse(content=[_StubBlock(type="text", text="never")]))
+    stub = _stub_stream_client(text="never", stop_reason="end_turn")
     rt = runtime_module.MessagesRuntime(client=stub)
     monkeypatch.setattr(runtime_module, "_default", rt)
 
@@ -180,6 +217,160 @@ async def test_chat_returns_error_when_kill_switch_is_on(session, monkeypatch) -
         assert r.status_code == 200
         events = await _read_sse_events(r.aiter_bytes())
 
-    # Must surface an error event before any done.
     assert any(e["kind"] == "error" and e.get("reason") == "kill_switch_activated" for e in events)
-    stub.messages.create.assert_not_called()
+    stub.messages.stream.assert_not_called()
+
+
+@requires_db
+@pytest.mark.asyncio
+async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
+    """CEO calls delegate_to_specialist → stub returns 'not_implemented' → CEO relays."""
+    user = User(supabase_id="sub-chat-3", email="chat3@example.com", tier="founder")
+    session.add(user)
+    await session.commit()
+
+    fake_user = CurrentUser(supabase_id="sub-chat-3", email="chat3@example.com", raw_claims={})
+
+    # Turn 1: CEO responds with tool_use calling product_builder.
+    # Turn 2: CEO responds with text to the user using the stub's response.
+    seq = _SequenceStreamClient(
+        responses=[
+            {
+                "text": "",
+                "tool_uses": [
+                    {
+                        "id": "tu_1",
+                        "name": "delegate_to_specialist",
+                        "input": {
+                            "specialist_name": "product_builder",
+                            "task": "launch a candle store",
+                        },
+                    }
+                ],
+                "stop_reason": "tool_use",
+            },
+            {
+                "text": "Product Builder isn't online yet — here's what it would do: (relayed)",
+                "stop_reason": "end_turn",
+            },
+        ]
+    )
+    rt = runtime_module.MessagesRuntime(client=seq)  # type: ignore[arg-type]
+    monkeypatch.setattr(runtime_module, "_default", rt)
+
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: fake_user
+
+    transport = ASGITransport(app=app)
+    async with (
+        AsyncClient(transport=transport, base_url="http://test") as client,
+        client.stream(
+            "POST",
+            "/chat",
+            json={"message": "launch a candle store"},
+            headers={"Authorization": "Bearer stub"},
+        ) as r,
+    ):
+        assert r.status_code == 200
+        events = await _read_sse_events(r.aiter_bytes())
+
+    kinds = [e["kind"] for e in events]
+    # Expect tool_call → tool_result → then text_delta of the relay.
+    assert "tool_call" in kinds
+    assert "tool_result" in kinds
+
+    tool_call_event = next(e for e in events if e["kind"] == "tool_call")
+    assert tool_call_event["name"] == "delegate_to_specialist"
+    assert tool_call_event["input"]["specialist_name"] == "product_builder"
+
+    # The specialist's completion should be in the event log.
+    from helm.services.sessions import get_or_create_ceo_session
+
+    synced = await sync_user_from_supabase(session, fake_user)
+    ceo = await get_or_create_ceo_session(session, synced.id)
+    rows = (
+        (
+            await session.execute(
+                select(AgentEvent)
+                .where(AgentEvent.session_id == ceo.id)
+                .where(AgentEvent.event_type == "specialist_completed")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].agent_name == "product_builder"
+    assert rows[0].payload["status"] == "not_implemented"
+
+
+@requires_db
+@pytest.mark.asyncio
+async def test_request_user_approval_creates_row_and_emits_event(session, monkeypatch) -> None:
+    from helm.db.models import Approval, Business
+
+    user = User(supabase_id="sub-chat-4", email="chat4@example.com", tier="founder")
+    session.add(user)
+    await session.flush()
+    biz = Business(user_id=user.id, name="Test Candles", vertical="dtc_physical")
+    session.add(biz)
+    await session.commit()
+    biz_id = biz.id
+
+    fake_user = CurrentUser(supabase_id="sub-chat-4", email="chat4@example.com", raw_claims={})
+
+    seq = _SequenceStreamClient(
+        responses=[
+            {
+                "text": "",
+                "tool_uses": [
+                    {
+                        "id": "tu_approval",
+                        "name": "request_user_approval",
+                        "input": {
+                            "kind": "spend",
+                            "summary": "Spend $340 on 3 TikTok creatives.",
+                            "business_id": str(biz_id),
+                        },
+                    }
+                ],
+                "stop_reason": "tool_use",
+            },
+            {"text": "Asked for approval.", "stop_reason": "end_turn"},
+        ]
+    )
+    rt = runtime_module.MessagesRuntime(client=seq)  # type: ignore[arg-type]
+    monkeypatch.setattr(runtime_module, "_default", rt)
+
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: fake_user
+
+    transport = ASGITransport(app=app)
+    async with (
+        AsyncClient(transport=transport, base_url="http://test") as client,
+        client.stream(
+            "POST",
+            "/chat",
+            json={"message": "spend money"},
+            headers={"Authorization": "Bearer stub"},
+        ) as r,
+    ):
+        assert r.status_code == 200
+        events = await _read_sse_events(r.aiter_bytes())
+
+    # SSE must surface an approval_requested event.
+    approval_events = [e for e in events if e["kind"] == "approval_requested"]
+    assert len(approval_events) == 1
+    assert approval_events[0]["approval_kind"] == "spend"
+    assert approval_events[0]["business_id"] == str(biz_id)
+
+    # DB must have the approvals row.
+    rows = (
+        (await session.execute(select(Approval).where(Approval.business_id == biz_id)))
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].status == "pending"
+    assert rows[0].kind == "spend"
+    assert "TikTok" in rows[0].summary

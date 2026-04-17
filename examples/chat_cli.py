@@ -93,6 +93,13 @@ def _render_event(event: dict) -> None:
         label = "error" if event.get("is_error") else "ok"
         print(f"   [tool←] {event.get('name')}: {label}", flush=True)
         return
+    if kind == "approval_requested":
+        print(
+            f"\n   [approval] {event.get('approval_kind')}: {event.get('summary')}",
+            flush=True,
+        )
+        print(f"              id={event.get('approval_id')}", flush=True)
+        return
     if kind == "turn_cost":
         print(
             f"\n   ({event.get('input_tokens', 0)} in / "
