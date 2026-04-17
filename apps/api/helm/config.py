@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
     composio_api_key: str = Field("", alias="COMPOSIO_API_KEY")
     composio_mcp_url: str = Field("https://mcp.composio.dev", alias="COMPOSIO_MCP_URL")
+    composio_webhook_secret: str = Field("", alias="COMPOSIO_WEBHOOK_SECRET")
 
     # Phase 2+
     stripe_secret_key: str = Field("", alias="STRIPE_SECRET_KEY")

@@ -121,11 +121,9 @@ async def list_tools(
     business_id: uuid.UUID | None,
     toolkits: list[str] | None = None,
 ) -> list[Any]:
-    """Return tools available for this tenant in this toolkit selection.
-
-    Session 4 returns the raw Composio Tool collection; Session 5 adds the
-    `to_anthropic_tool_params(...)` transformer alongside the first
-    specialist that delegates via Composio.
+    """Return raw Composio Tool objects for this tenant in this toolkit
+    selection. Pass the result to `tools_as_anthropic_params` to get the
+    shape Anthropic's Messages API expects.
     """
     eid = entity_id_for(user_id, business_id)
     client = _get_client()
@@ -134,6 +132,45 @@ async def list_tools(
         return client.tools.get(user_id=eid, toolkits=toolkits)
 
     return list(await _in_thread(_get))
+
+
+def tools_as_anthropic_params(tools: list[Any]) -> list[dict[str, Any]]:
+    """Convert Composio `Tool` objects (or dicts with the same shape) to the
+    `{name, description, input_schema}` shape Anthropic's Messages API tool
+    list accepts.
+
+    We deliberately type the output as plain dicts rather than the SDK's
+    `ToolParam` TypedDict — Anthropic's type machinery here is a discriminated
+    union over ~15 tool variants, and the runtime cast at call-site is
+    simpler to reason about than threading the right variant through the
+    transformer.
+
+    Composio's tool slug (e.g. "GMAIL_SEND_EMAIL") is used as the Anthropic
+    tool name so the CEO Agent's `delegate_to_specialist` output and the
+    specialist's Composio `execute_tool` call both use the same identifier.
+    """
+    params: list[dict[str, Any]] = []
+    for tool in tools:
+        slug = _attr(tool, "slug")
+        description = _attr(tool, "description") or _attr(tool, "human_description") or ""
+        schema = _attr(tool, "input_parameters") or {"type": "object", "properties": {}}
+        if not isinstance(slug, str) or not slug:
+            continue
+        params.append(
+            {
+                "name": slug,
+                "description": description,
+                "input_schema": schema,
+            }
+        )
+    return params
+
+
+def _attr(obj: Any, name: str) -> Any:
+    """Read a field from a Composio model or a plain dict uniformly."""
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
 
 
 async def execute_tool(
