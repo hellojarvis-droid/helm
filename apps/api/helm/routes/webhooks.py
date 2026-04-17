@@ -19,17 +19,19 @@ import hashlib
 import hmac
 from typing import Any
 
+import stripe
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.config import get_settings
-from helm.db.models import Integration
+from helm.db.models import Business, Integration
 from helm.db.session import get_session
+from helm.services import event_log, stripe_authorization, stripe_client
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
-log = structlog.get_logger("helm.webhooks.composio")
+log = structlog.get_logger("helm.webhooks")
 
 _SIG_HEADER = "x-composio-signature-256"
 _SIG_PREFIX = "sha256="
@@ -137,3 +139,141 @@ def _extract_connection_id(payload: dict[str, Any]) -> str | None:
             if isinstance(val, str) and val:
                 return val
     return None
+
+
+# ────────────────────────────────────────────────────────────────────
+# Stripe webhook — Connect onboarding + Issuing authorizations + revenue
+# ────────────────────────────────────────────────────────────────────
+
+
+@router.post("/stripe")
+async def stripe_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    body = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe_client.verify_webhook(body, sig_header)
+    except stripe.SignatureVerificationError as e:
+        log.warning("stripe.bad_signature", err=str(e))
+        raise HTTPException(status_code=401, detail="invalid signature") from e
+    except RuntimeError as e:
+        # Service-level config missing (secret unset). 503 so Stripe retries,
+        # and the error surfaces as an ops issue rather than a 500.
+        log.error("stripe.webhook_unconfigured", err=str(e))
+        raise HTTPException(status_code=503, detail="webhook not configured") from e
+    except ValueError as e:
+        log.warning("stripe.bad_payload", err=str(e))
+        raise HTTPException(status_code=400, detail="invalid payload") from e
+
+    event_type = event.get("type") if isinstance(event, dict) else event["type"]
+    data_obj = (
+        event.get("data", {}).get("object", {})
+        if isinstance(event, dict)
+        else event["data"]["object"]
+    )
+    log.info("stripe.event", type=event_type)
+
+    if event_type == "account.updated":
+        return await _handle_account_updated(db, data_obj)
+    if event_type == "issuing_authorization.request":
+        return await _handle_authorization_request(db, data_obj)
+    if event_type == "payment_intent.succeeded":
+        return await _handle_payment_succeeded(db, data_obj)
+
+    # Unknown event type — ack so Stripe doesn't retry forever.
+    return {"status": "ignored", "type": event_type}
+
+
+async def _handle_account_updated(db: AsyncSession, account: dict[str, Any]) -> dict[str, Any]:
+    account_id = str(account.get("id") or "")
+    if not account_id:
+        return {"status": "ignored", "reason": "no account id"}
+
+    res = await db.execute(select(Business).where(Business.stripe_account_id == account_id))
+    biz = res.scalar_one_or_none()
+    if biz is None:
+        return {"status": "ignored", "reason": "no business for account"}
+
+    complete = stripe_client.account_onboarding_complete(account)
+    if biz.stripe_onboarding_complete != complete:
+        biz.stripe_onboarding_complete = complete
+        biz.stripe_meta = {
+            **biz.stripe_meta,
+            "last_account_update": {
+                "details_submitted": account.get("details_submitted"),
+                "charges_enabled": account.get("charges_enabled"),
+                "payouts_enabled": account.get("payouts_enabled"),
+            },
+        }
+        await db.commit()
+
+    return {"status": "ok", "onboarding_complete": complete}
+
+
+async def _handle_authorization_request(
+    db: AsyncSession, auth_obj: dict[str, Any]
+) -> dict[str, Any]:
+    """Synchronously decide a Stripe Issuing authorization.
+
+    Stripe expects a response within 2 seconds. Our decision tree is all
+    in-process Postgres reads; latency is bounded by one SELECT against
+    `businesses` + one aggregate SELECT against `agent_events`. The caller
+    should use this response body to shape the Stripe API reply in a
+    separate server-to-server call — Stripe's own webhook is one-way.
+    """
+    merchant = auth_obj.get("merchant_data") or {}
+    amount_cents = int(auth_obj.get("pending_request", {}).get("amount", 0) or 0)
+    category = merchant.get("category")
+    name = merchant.get("name")
+    account_id = str(auth_obj.get("stripe_account") or auth_obj.get("account") or "")
+
+    decision = await stripe_authorization.decide_authorization(
+        db,
+        stripe_account_id=account_id,
+        amount_cents=amount_cents,
+        merchant_category=category,
+        merchant_name=name,
+    )
+
+    # The response body is informational; the real approve/decline has to be
+    # sent back via Issuing.Authorization.approve/decline on the authorization
+    # object. Session 8 wires that side channel; for now we just log + return.
+    return {
+        "approved": decision.approved,
+        "reason": decision.reason,
+        "amount_cents": decision.amount_cents,
+    }
+
+
+async def _handle_payment_succeeded(db: AsyncSession, intent: dict[str, Any]) -> dict[str, Any]:
+    """payment_intent.succeeded on a connected account = revenue. We log an
+    event; daily/weekly rollups are aggregated from the event log.
+    """
+    account_id = str(intent.get("stripe_account") or intent.get("account") or "")
+    if not account_id:
+        return {"status": "ignored", "reason": "no connected account"}
+
+    res = await db.execute(select(Business).where(Business.stripe_account_id == account_id))
+    biz = res.scalar_one_or_none()
+    if biz is None:
+        return {"status": "ignored", "reason": "no business for account"}
+
+    amount_cents = int(intent.get("amount_received") or intent.get("amount") or 0)
+    session_id = await stripe_authorization._latest_session(db, biz.id)
+    if session_id is not None:
+        await event_log.write(
+            db,
+            session_id=session_id,
+            business_id=biz.id,
+            event_type="revenue_received",
+            agent_name="stripe",
+            payload={
+                "amount_cents": amount_cents,
+                "intent_id": intent.get("id"),
+                "currency": intent.get("currency"),
+            },
+            cost_cents=-amount_cents,  # negative = inflow
+        )
+    return {"status": "ok", "business_id": str(biz.id), "amount_cents": amount_cents}

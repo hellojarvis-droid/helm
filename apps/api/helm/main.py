@@ -23,6 +23,7 @@ from helm.routes import chat as chat_routes
 from helm.routes import health as health_routes
 from helm.routes import integrations as integrations_routes
 from helm.routes import kill_switch as kill_switch_routes
+from helm.routes import stripe as stripe_routes
 from helm.routes import webhooks as webhooks_routes
 
 
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(approvals_routes.router)
     app.include_router(integrations_routes.router)
     app.include_router(webhooks_routes.router)
+    app.include_router(stripe_routes.router)
     return app
 
 
