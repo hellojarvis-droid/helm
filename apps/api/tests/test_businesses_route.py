@@ -1,0 +1,100 @@
+"""Businesses REST — create / list / get, with tenant isolation."""
+
+from __future__ import annotations
+
+import pytest
+from helm.auth import CurrentUser, require_user
+from helm.db.models import User
+from helm.main import create_app
+from httpx import ASGITransport, AsyncClient
+
+from tests.conftest import requires_db
+
+
+@requires_db
+@pytest.mark.asyncio
+async def test_create_list_get_business(session) -> None:
+    user = User(supabase_id="sub-biz-1", email="biz1@example.com", tier="founder")
+    session.add(user)
+    await session.commit()
+
+    fake_user = CurrentUser(supabase_id="sub-biz-1", email="biz1@example.com", raw_claims={})
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: fake_user
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer stub"}
+
+        # Create
+        r = await client.post(
+            "/businesses",
+            json={"name": "Candle Co", "vertical": "dtc_physical"},
+            headers=headers,
+        )
+        assert r.status_code == 201, r.text
+        biz = r.json()
+        assert biz["name"] == "Candle Co"
+        assert biz["vertical"] == "dtc_physical"
+        assert biz["status"] == "initializing"
+        assert biz["weekly_spend_cap_cents"] == 50000
+        biz_id = biz["id"]
+
+        # List
+        r = await client.get("/businesses", headers=headers)
+        assert r.status_code == 200
+        rows = r.json()
+        assert len(rows) == 1
+        assert rows[0]["id"] == biz_id
+
+        # Get
+        r = await client.get(f"/businesses/{biz_id}", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["id"] == biz_id
+
+        # Bad vertical
+        r = await client.post(
+            "/businesses",
+            json={"name": "X", "vertical": "nonsense"},
+            headers=headers,
+        )
+        assert r.status_code == 422
+
+
+@requires_db
+@pytest.mark.asyncio
+async def test_business_isolation_between_users(session) -> None:
+    user_a = User(supabase_id="sub-biz-a", email="a@example.com", tier="founder")
+    user_b = User(supabase_id="sub-biz-b", email="b@example.com", tier="founder")
+    session.add_all([user_a, user_b])
+    await session.commit()
+
+    fake_a = CurrentUser(supabase_id="sub-biz-a", email="a@example.com", raw_claims={})
+    fake_b = CurrentUser(supabase_id="sub-biz-b", email="b@example.com", raw_claims={})
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+
+    # A creates a business.
+    app.dependency_overrides[require_user] = lambda: fake_a
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post(
+            "/businesses",
+            json={"name": "A's place", "vertical": "dtc_physical"},
+            headers={"Authorization": "Bearer stub"},
+        )
+        assert r.status_code == 201
+        a_biz_id = r.json()["id"]
+
+    # B tries to read A's business.
+    app.dependency_overrides[require_user] = lambda: fake_b
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            f"/businesses/{a_biz_id}",
+            headers={"Authorization": "Bearer stub"},
+        )
+        assert r.status_code == 404, "cross-tenant read must 404 (fail-closed)"
+
+        # B's list should be empty.
+        r = await client.get("/businesses", headers={"Authorization": "Bearer stub"})
+        assert r.json() == []
