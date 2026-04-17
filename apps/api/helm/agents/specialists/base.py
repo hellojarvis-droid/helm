@@ -1,55 +1,63 @@
 """Specialist framework.
 
 A specialist is a focused sub-agent invoked by the CEO via `delegate_to_specialist`.
-Session 2 scope: specialists are single-shot LLM calls with their own system prompt
-and optional Anthropic-native tools (web_search). No sub-session state, no Composio
-yet. That arrives in Session 3.
 
-Contract:
-  - `name` is the CEO's vocabulary for this specialist (e.g. "idea_scout").
-  - `run(db, ctx, task)` returns a `SpecialistResult` — a structured envelope the
-    CEO receives as tool_result content.
-  - Specialists log their own `specialist_completed` event; the runtime's tool
-    wrapper logs the outer tool_call / tool_result around it.
+Session 6 additions:
+  - BusinessContext.session_id — specialists can write event_log entries
+  - LLMSpecialist runs a full tool-use loop (not single-shot) so it can use
+    both Anthropic-native tools (web_search) and Composio tools in the same
+    conversation
+  - composio_toolkits parameter — toolkits the specialist may use when the
+    business has them connected. Filtered against ctx.connected_integrations
+    at run-time so we never ask Composio for tools from unconnected toolkits.
+
+Invariants (enforced inside LLMSpecialist.run, not on callers):
+  1. kill_switch.assert_not_set before every LLM call AND every tool call
+  2. Every tool_use / tool_result gets an agent_events row with agent_name
+     set to the specialist's own name
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 import anthropic
+import structlog
 from anthropic.types import MessageParam, ToolUnionParam
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.config import get_settings
 from helm.db.models import AgentEvent, Business, Integration
-from helm.services import event_log
+from helm.services import composio_client, event_log, kill_switch
+
+log = structlog.get_logger("helm.specialists")
 
 # Token costs per million (keep in sync with runtime._cost_cents).
 _COSTS = {
-    "claude-opus-4-7": (1500, 7500),  # $15/M input, $75/M output → cents per M
+    "claude-opus-4-7": (1500, 7500),
     "claude-sonnet-4-6": (300, 1500),
     "claude-haiku-4-5-20251001": (80, 400),
 }
+
+_MAX_TOOL_ITERATIONS = 8
 
 
 @dataclass(frozen=True, slots=True)
 class BusinessContext:
     """The slice of tenant + business state every specialist receives.
 
-    Session 5 hydrates this from DB before `invoke()` runs the specialist —
-    so Creative Director can refine an existing brand kit, Idea Scout can see
-    past event summaries, etc. See AGENTS.md §11 for the full spec.
-
-    Cross-business / orchestrator-level invocations leave business_id=None,
-    in which case brand_kit + connected_integrations default to empty.
+    session_id is the CEO Agent session this specialist call is nested under
+    — specialists write their own tool_call / tool_result events against it,
+    so the user can replay a specialist's work inside the outer conversation.
     """
 
     user_id: uuid.UUID
     business_id: uuid.UUID | None
+    session_id: uuid.UUID
     business_name: str = ""
     vertical: str = ""
     brand_kit: dict[str, Any] = field(default_factory=dict)
@@ -112,10 +120,16 @@ def _cost_cents_for(model: str, input_tokens: int, output_tokens: int) -> int:
 
 
 class LLMSpecialist:
-    """A single-shot LLM-backed specialist.
+    """An LLM-backed specialist with a full tool-use loop.
 
-    Subclass or instantiate with system prompt + model + tools. `run` does one
-    Messages API call, extracts text, logs completion, returns structured envelope.
+    Tools come from three sources, all optional:
+      - Anthropic server-side tools (web_search) declared via `tools=`
+      - Composio tools — toolkits in `composio_toolkits` that are also in
+        `ctx.connected_integrations` are loaded at run-time and merged in.
+      - Just text: pass neither; the loop degrades to a single-shot call.
+
+    The loop runs at most `_MAX_TOOL_ITERATIONS` iterations and respects the
+    global kill switch between every turn.
     """
 
     def __init__(
@@ -125,6 +139,7 @@ class LLMSpecialist:
         model: str,
         system_prompt: str,
         tools: list[ToolUnionParam] | None = None,
+        composio_toolkits: list[str] | None = None,
         max_tokens: int = 4096,
         client: anthropic.AsyncAnthropic | None = None,
     ) -> None:
@@ -132,6 +147,7 @@ class LLMSpecialist:
         self.model = model
         self.system_prompt = system_prompt
         self.tools = tools or []
+        self.composio_toolkits = composio_toolkits or []
         self.max_tokens = max_tokens
         self._client = client
 
@@ -142,38 +158,199 @@ class LLMSpecialist:
         task: str,
     ) -> SpecialistResult:
         client = self._client or _anthropic_client()
+        tools, composio_slugs = await self._assemble_tools(ctx)
+
         messages: list[MessageParam] = [{"role": "user", "content": task}]
-        response = await client.messages.create(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            system=self.system_prompt,
-            tools=self.tools,
-            messages=messages,
-        )
-        text = "".join(b.text for b in response.content if b.type == "text")
-        cost = _cost_cents_for(
-            self.model, response.usage.input_tokens, response.usage.output_tokens
-        )
+        input_tokens = 0
+        output_tokens = 0
+        final_text = ""
+        final_stop_reason = "end_turn"
+
+        for _iteration in range(_MAX_TOOL_ITERATIONS):
+            await kill_switch.assert_not_set(db, ctx.user_id)
+            try:
+                response = await client.messages.create(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    system=self.system_prompt,
+                    tools=tools,
+                    messages=messages,
+                )
+            except anthropic.APIError as e:
+                return SpecialistResult(
+                    specialist=self.name,
+                    status="error",
+                    summary=f"{self.name} hit an Anthropic API error: {str(e)[:200]}",
+                    metadata={"error_type": type(e).__name__},
+                    cost_cents=_cost_cents_for(self.model, input_tokens, output_tokens),
+                )
+
+            input_tokens += response.usage.input_tokens
+            output_tokens += response.usage.output_tokens
+            final_stop_reason = response.stop_reason or "end_turn"
+
+            # Pull text + tool_use blocks out of the response.
+            assistant_content: list[dict[str, Any]] = []
+            tool_uses: list[dict[str, Any]] = []
+            for block in response.content:
+                if block.type == "text":
+                    assistant_content.append({"type": "text", "text": block.text})
+                elif block.type == "tool_use":
+                    tu = {
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    }
+                    assistant_content.append(tu)
+                    tool_uses.append(tu)
+                else:
+                    assistant_content.append({"type": block.type, "raw": block.model_dump()})
+
+            final_text = "".join(
+                b.get("text", "") for b in assistant_content if b.get("type") == "text"
+            )
+
+            if final_stop_reason == "end_turn":
+                break
+
+            if final_stop_reason != "tool_use" or not tool_uses:
+                # max_tokens / stop_sequence / unknown — no point continuing.
+                break
+
+            # Execute tools. Append assistant turn + tool_results as the next user turn.
+            # Anthropic's MessageParam.content is a union of block TypedDicts —
+            # our dicts match one of those variants by construction but mypy can't
+            # prove it without per-block narrowing. Cast is the narrowest fix.
+            messages.append(cast(MessageParam, {"role": "assistant", "content": assistant_content}))
+            tool_results = await self._execute_tool_uses(
+                db, ctx, tool_uses, composio_slugs=composio_slugs
+            )
+            messages.append(cast(MessageParam, {"role": "user", "content": tool_results}))
+
         return SpecialistResult(
             specialist=self.name,
             status="ok",
-            summary=text,
+            summary=final_text,
             metadata={
                 "model": self.model,
-                "stop_reason": response.stop_reason,
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
+                "stop_reason": final_stop_reason,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "composio_tools_available": bool(composio_slugs),
             },
-            cost_cents=cost,
+            cost_cents=_cost_cents_for(self.model, input_tokens, output_tokens),
         )
+
+    # ────────────────────────────────────────────────────────────────
+    # Internals
+    # ────────────────────────────────────────────────────────────────
+
+    async def _assemble_tools(
+        self, ctx: BusinessContext
+    ) -> tuple[list[ToolUnionParam], frozenset[str]]:
+        """Return the full tool list for this invocation + the set of Composio
+        slugs so the dispatcher knows which branch to take on tool_use.
+
+        Composio toolkits the specialist CAN use are intersected with the
+        business's connected toolkits — we never ask Composio for tools from
+        toolkits the user hasn't authorized.
+        """
+        tools: list[ToolUnionParam] = list(self.tools)
+        composio_slugs: set[str] = set()
+
+        usable = [t for t in self.composio_toolkits if t in ctx.connected_integrations]
+        if usable:
+            try:
+                raw = await composio_client.list_tools(
+                    user_id=ctx.user_id,
+                    business_id=ctx.business_id,
+                    toolkits=usable,
+                )
+            except Exception as e:  # SDK / network — log and proceed without.
+                log.warning("specialist.composio_list_failed", err=str(e), toolkits=usable)
+                raw = []
+            params = composio_client.tools_as_anthropic_params(raw)
+            for p in params:
+                # Composio tool dicts match the Anthropic ToolParam shape by
+                # construction (name/description/input_schema); mypy needs a cast.
+                tools.append(cast(ToolUnionParam, p))
+                composio_slugs.add(p["name"])
+
+        return tools, frozenset(composio_slugs)
+
+    async def _execute_tool_uses(
+        self,
+        db: AsyncSession,
+        ctx: BusinessContext,
+        tool_uses: list[dict[str, Any]],
+        *,
+        composio_slugs: frozenset[str],
+    ) -> list[dict[str, Any]]:
+        """Execute every tool_use block from one assistant turn, log each,
+        return the tool_result content blocks to feed back to the model."""
+        results: list[dict[str, Any]] = []
+        for tu in tool_uses:
+            await kill_switch.assert_not_set(db, ctx.user_id)
+            name = tu["name"]
+            args = tu.get("input") or {}
+
+            await event_log.write(
+                db,
+                session_id=ctx.session_id,
+                business_id=ctx.business_id,
+                event_type="tool_call",
+                agent_name=self.name,
+                payload={"name": name, "input": args},
+            )
+
+            if name in composio_slugs:
+                try:
+                    result = await composio_client.execute_tool(
+                        tool_slug=name,
+                        arguments=args,
+                        user_id=ctx.user_id,
+                        business_id=ctx.business_id,
+                    )
+                    is_error = False
+                except Exception as e:  # surface to the model as tool_result error
+                    log.exception("specialist.composio_execute_failed", tool=name)
+                    result = {"error": str(e)[:400]}
+                    is_error = True
+            else:
+                # Not a Composio tool → Anthropic handled it server-side
+                # (web_search etc.). The server embeds the result in the next
+                # message; we'd never see a client-side tool_use for it.
+                result = {
+                    "error": (
+                        f"Specialist {self.name} received a client-side tool_use for "
+                        f"'{name}' but has no implementation for it. Ignoring."
+                    )
+                }
+                is_error = True
+
+            await event_log.write(
+                db,
+                session_id=ctx.session_id,
+                business_id=ctx.business_id,
+                event_type="tool_result",
+                agent_name=self.name,
+                payload={"name": name, "result": result, "is_error": is_error},
+            )
+
+            results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tu["id"],
+                    "content": json.dumps(result),
+                    "is_error": is_error,
+                }
+            )
+        return results
 
 
 class StubSpecialist:
-    """Placeholder that returns a scripted 'not yet online' response.
-
-    These preserve the specialist's voice so the CEO Agent can frame them
-    coherently to the user — no hallucinating capability the stub doesn't have.
-    """
+    """Placeholder that returns a scripted 'not yet online' response."""
 
     def __init__(
         self,
@@ -213,11 +390,7 @@ async def _hydrate_context(
     session_id: uuid.UUID,
 ) -> BusinessContext:
     """Load the business + its brand_kit + active integrations + recent events
-    into a `BusinessContext` so specialists have the state they need without
-    going to DB themselves.
-
-    Orchestrator-level calls (business_id=None) get a minimal context with the
-    last 20 events on the session so Idea Scout et al. can see prior exchanges.
+    into a `BusinessContext`.
     """
     name = ""
     vertical = ""
@@ -248,8 +421,6 @@ async def _hydrate_context(
         )
         integrations = tuple(integ_rows)
 
-    # Recent events — last 20 on this session, newest first. Trimmed to the
-    # fields a specialist actually needs (type + agent + short payload summary).
     event_rows = (
         (
             await db.execute(
@@ -275,6 +446,7 @@ async def _hydrate_context(
     return BusinessContext(
         user_id=user_id,
         business_id=business_id,
+        session_id=session_id,
         business_name=name,
         vertical=vertical,
         brand_kit=brand_kit,
@@ -310,11 +482,7 @@ async def invoke(
     user_id: uuid.UUID,
     business_id: uuid.UUID | None = None,
 ) -> SpecialistResult:
-    """Single entry point used by `delegate_to_specialist`.
-
-    Looks up the specialist, logs the invocation end-to-end to the event log
-    with the specialist's `agent_name`, returns the structured result.
-    """
+    """Single entry point used by `delegate_to_specialist`."""
     specialist = get(specialist_name)
     if specialist is None:
         return SpecialistResult(
@@ -328,6 +496,14 @@ async def invoke(
     ctx = await _hydrate_context(db, user_id, business_id, session_id)
     try:
         result = await specialist.run(db, ctx, task)
+    except kill_switch.KillSwitchActivated:
+        return SpecialistResult(
+            specialist=specialist_name,
+            status="error",
+            summary="Kill switch is on — specialist halted mid-run.",
+            metadata={"reason": "kill_switch_activated"},
+            cost_cents=0,
+        )
     except anthropic.APIError as e:
         return SpecialistResult(
             specialist=specialist_name,

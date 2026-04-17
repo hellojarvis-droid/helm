@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock
@@ -10,6 +11,13 @@ import pytest
 from anthropic.types import TextBlock, Usage
 from helm.agents.specialists.base import BusinessContext
 from helm.agents.specialists.creative_director import CreativeDirectorSpecialist
+from helm.services import kill_switch
+
+
+def _prime_kill_switch_cache(user_id) -> None:
+    """Bypass the DB-level kill_switch check by pre-populating the cache.
+    Keeps these tests DB-free while still running the real LLMSpecialist loop."""
+    kill_switch._cache[user_id] = kill_switch._CacheEntry(active=False, fetched_at=time.monotonic())
 
 
 @dataclass
@@ -67,7 +75,12 @@ async def test_creative_director_parses_brand_kit() -> None:
     spec = CreativeDirectorSpecialist()
     spec._client = _stub_client_returning(_SAMPLE_KIT)  # type: ignore[assignment]
 
-    ctx = BusinessContext(user_id=__import__("uuid").UUID(int=1), business_id=None)
+    ctx = BusinessContext(
+        user_id=__import__("uuid").UUID(int=1),
+        business_id=None,
+        session_id=__import__("uuid").UUID(int=2),
+    )
+    _prime_kill_switch_cache(ctx.user_id)
     result = await spec.run(db=None, ctx=ctx, task="candle brand for slow evenings")  # type: ignore[arg-type]
 
     assert result.status == "ok"
@@ -83,7 +96,12 @@ async def test_creative_director_handles_non_json_output() -> None:
     spec = CreativeDirectorSpecialist()
     spec._client = _stub_client_returning("I'm not going to follow instructions today.")  # type: ignore[assignment]
 
-    ctx = BusinessContext(user_id=__import__("uuid").UUID(int=1), business_id=None)
+    ctx = BusinessContext(
+        user_id=__import__("uuid").UUID(int=1),
+        business_id=None,
+        session_id=__import__("uuid").UUID(int=2),
+    )
+    _prime_kill_switch_cache(ctx.user_id)
     result = await spec.run(db=None, ctx=ctx, task="candle brand")  # type: ignore[arg-type]
 
     assert result.status == "error"
@@ -97,7 +115,12 @@ async def test_creative_director_accepts_bare_json_without_fences() -> None:
     spec = CreativeDirectorSpecialist()
     spec._client = _stub_client_returning(bare)  # type: ignore[assignment]
 
-    ctx = BusinessContext(user_id=__import__("uuid").UUID(int=1), business_id=None)
+    ctx = BusinessContext(
+        user_id=__import__("uuid").UUID(int=1),
+        business_id=None,
+        session_id=__import__("uuid").UUID(int=2),
+    )
+    _prime_kill_switch_cache(ctx.user_id)
     result = await spec.run(db=None, ctx=ctx, task="candle brand")  # type: ignore[arg-type]
 
     assert result.status == "ok"

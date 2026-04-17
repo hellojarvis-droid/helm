@@ -30,6 +30,9 @@ def build() -> LLMSpecialist:
         model="claude-opus-4-7",
         system_prompt=_PROMPT_PATH.read_text(),
         tools=[_WEB_SEARCH_TOOL],
+        # Optional Composio toolkits — used only when the business has them
+        # connected. When none connected, falls back to web_search only.
+        composio_toolkits=["reddit", "hackernews", "product_hunt"],
         max_tokens=6000,
     )
 
