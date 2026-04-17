@@ -86,6 +86,13 @@ class Business(Base):
     )
     stripe_account_id: Mapped[str | None] = mapped_column(String)
     stripe_card_id: Mapped[str | None] = mapped_column(String)
+    stripe_onboarding_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    stripe_issuing_cardholder_id: Mapped[str | None] = mapped_column(String)
+    stripe_meta: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     shopify_shop_domain: Mapped[str | None] = mapped_column(String)
     brand_kit: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
