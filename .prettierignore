@@ -17,3 +17,7 @@ pnpm-lock.yaml
 # via a formatter. Hand-edit only.
 CLAUDE.md
 docs/**/*.md
+
+# Agent prompt files. Line breaks and bullet structure are load-bearing at
+# inference time — a reflow can change how the model interprets the prompt.
+**/prompts/**/*.md
