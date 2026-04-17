@@ -30,4 +30,6 @@ RUN uv sync --no-dev
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "helm.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# sh -c so $PORT expands at container start. Render injects PORT=10000;
+# local `docker run` falls back to 8000 via the default above.
+CMD ["sh", "-c", "uv run uvicorn helm.main:app --host 0.0.0.0 --port ${PORT}"]
