@@ -36,8 +36,10 @@ function SignInForm() {
     setBusy(true);
     try {
       const supabase = supabaseBrowser();
-      const fn = mode === "signin" ? supabase.auth.signInWithPassword : supabase.auth.signUp;
-      const { error } = await fn({ email, password });
+      const { error } =
+        mode === "signin"
+          ? await supabase.auth.signInWithPassword({ email, password })
+          : await supabase.auth.signUp({ email, password });
       if (error) {
         setErr(error.message);
         return;
