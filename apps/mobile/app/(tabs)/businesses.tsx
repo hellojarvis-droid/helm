@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +14,7 @@ import { createBusiness, listBusinesses, type Business } from "@/lib/api";
 import { colors } from "@/lib/colors";
 
 export default function BusinessesScreen() {
+  const router = useRouter();
   const [rows, setRows] = useState<Business[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
@@ -35,7 +37,12 @@ export default function BusinessesScreen() {
         data={rows ?? []}
         keyExtractor={(b) => b.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => <Row biz={item} />}
+        renderItem={({ item }) => (
+          <Row
+            biz={item}
+            onPress={() => router.push({ pathname: "/business/[id]", params: { id: item.id } })}
+          />
+        )}
         ListEmptyComponent={
           rows === null ? (
             <ActivityIndicator style={{ marginTop: 60 }} color={colors.iron} />
@@ -64,9 +71,9 @@ export default function BusinessesScreen() {
   );
 }
 
-function Row({ biz }: { biz: Business }) {
+function Row({ biz, onPress }: { biz: Business; onPress: () => void }) {
   return (
-    <View style={styles.row}>
+    <Pressable style={styles.row} onPress={onPress}>
       <View>
         <Text style={styles.name}>{biz.name}</Text>
         <Text style={styles.vertical}>{biz.vertical}</Text>
@@ -75,7 +82,7 @@ function Row({ biz }: { biz: Business }) {
         <Text style={styles.metaText}>${(biz.weekly_spend_cap_cents / 100).toFixed(0)}/wk</Text>
         <Text style={styles.metaText}>{biz.status}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

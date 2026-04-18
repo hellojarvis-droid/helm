@@ -173,6 +173,76 @@ export async function createBusiness(body: {
   return res.json();
 }
 
+export type BusinessDetail = Business & {
+  stripe_account_id: string | null;
+  stripe_card_id: string | null;
+  brand_kit: Record<string, unknown>;
+};
+
+export async function getBusiness(id: string): Promise<BusinessDetail> {
+  const res = await apiFetch(`/businesses/${id}`);
+  if (!res.ok) throw new Error(`getBusiness ${res.status}`);
+  return res.json();
+}
+
+export interface StripeOnboardResponse {
+  account_id: string;
+  onboarding_url: string;
+  expires_at: number;
+  reused_existing_account: boolean;
+}
+
+export async function startStripeOnboarding(businessId: string): Promise<StripeOnboardResponse> {
+  const res = await apiFetch(`/businesses/${businessId}/stripe/onboard`, { method: "POST" });
+  if (!res.ok) throw new Error(`startStripeOnboarding ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ──────────────────────────────────────────────────────────
+// Integrations (Composio-mediated)
+// ──────────────────────────────────────────────────────────
+
+export interface Integration {
+  id: string;
+  business_id: string;
+  toolkit: string;
+  composio_connection_id: string;
+  status: "pending" | "active" | "failed" | "expired";
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ConnectToolkitResponse {
+  integration_id: string;
+  toolkit: string;
+  redirect_url: string;
+  composio_connection_id: string;
+  status: string;
+}
+
+export async function listIntegrations(businessId: string): Promise<Integration[]> {
+  const res = await apiFetch(`/integrations/${businessId}`);
+  if (!res.ok) throw new Error(`listIntegrations ${res.status}`);
+  return res.json();
+}
+
+export async function connectToolkit(
+  businessId: string,
+  toolkit: string,
+): Promise<ConnectToolkitResponse> {
+  const res = await apiFetch(`/integrations/${businessId}/connect/${toolkit}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`connectToolkit ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function syncIntegration(integrationId: string): Promise<Integration> {
+  const res = await apiFetch(`/integrations/${integrationId}/sync`, { method: "POST" });
+  if (!res.ok) throw new Error(`syncIntegration ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 // ──────────────────────────────────────────────────────────
 // Approvals
 // ──────────────────────────────────────────────────────────
