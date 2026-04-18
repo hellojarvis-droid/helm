@@ -33,11 +33,17 @@ const BADGE: Record<string, Badge> = {
     fg: colors.warning,
     border: "rgba(184,134,11,0.35)",
   },
-  approval_granted: {
+  approval_approved: {
     label: "approved",
     bg: "rgba(45,134,89,0.12)",
     fg: colors.success,
     border: "rgba(45,134,89,0.4)",
+  },
+  approval_modified: {
+    label: "modified",
+    bg: "rgba(232,93,26,0.1)",
+    fg: colors.accent,
+    border: "rgba(232,93,26,0.4)",
   },
   approval_denied: {
     label: "denied",
@@ -45,7 +51,13 @@ const BADGE: Record<string, Badge> = {
     fg: colors.danger,
     border: "rgba(168,37,26,0.35)",
   },
-  spend: {
+  spend_intent: {
+    label: "intent",
+    bg: colors.haze,
+    fg: colors.iron,
+    border: "rgba(107,107,107,0.2)",
+  },
+  spend_authorized: {
     label: "spend",
     bg: "rgba(45,134,89,0.12)",
     fg: colors.success,
@@ -56,6 +68,12 @@ const BADGE: Record<string, Badge> = {
     bg: "rgba(168,37,26,0.1)",
     fg: colors.danger,
     border: "rgba(168,37,26,0.35)",
+  },
+  specialist_completed: {
+    label: "specialist",
+    bg: colors.haze,
+    fg: colors.ink,
+    border: "rgba(107,107,107,0.2)",
   },
   kill_switch_activated: { label: "kill switch", bg: colors.danger, fg: colors.paper },
   error: {
@@ -177,15 +195,33 @@ function summarize(ev: AgentEvent): string {
       return `${stringOr(p.name, "tool")} → ${p.is_error ? "error" : "ok"}`;
     case "approval_requested":
       return `Requested approval: ${stringOr(p.summary, stringOr(p.kind, "—"))}`;
-    case "approval_granted":
+    case "approval_approved":
     case "approval_denied":
       return `${stringOr(p.kind, "approval")} ${
-        ev.event_type === "approval_granted" ? "granted" : "denied"
+        ev.event_type === "approval_approved" ? "approved" : "denied"
       }`;
-    case "spend":
-      return `Spend ${stringOr(p.amount_cents, "?")}¢ · ${stringOr(p.reason, "")}`.trim();
+    case "approval_modified": {
+      const cap = p.cap_raise as Record<string, unknown> | undefined;
+      if (cap && cap.changed && typeof cap.new_cap_cents === "number") {
+        return `${stringOr(p.kind, "approval")} approved — weekly cap raised to $${(
+          (cap.new_cap_cents as number) / 100
+        ).toFixed(0)}`;
+      }
+      return `${stringOr(p.kind, "approval")} modified`;
+    }
+    case "spend_intent":
+      return `Intent: $${((Number(p.amount_cents) || 0) / 100).toFixed(2)} to ${stringOr(
+        p.merchant_hint,
+        "?",
+      )} · ${stringOr(p.purpose, "")}`.trim();
+    case "spend_authorized":
+      return `Spend authorized: $${((Number(p.amount_cents) || 0) / 100).toFixed(
+        2,
+      )} to ${stringOr(p.merchant_name, stringOr(p.merchant_category, "?"))}`;
     case "spend_declined":
       return `Declined: ${stringOr(p.reason, "spend policy")}`;
+    case "specialist_completed":
+      return `${stringOr(p.name, "specialist")} → ${stringOr(p.status, "ok")}`;
     case "kill_switch_activated":
       return "Kill switch activated — all agents halted.";
     case "error":

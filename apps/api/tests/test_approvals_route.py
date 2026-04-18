@@ -137,7 +137,13 @@ async def test_approval_modified_raises_weekly_cap(session) -> None:
             headers={"Authorization": "Bearer stub"},
         )
         assert r.status_code == 200, r.text
-        assert r.json()["status"] == "modified"
+        body = r.json()
+        assert body["status"] == "modified"
+        # cap_raise should be on the response body so the client can render
+        # "cap raised to $N" without a second fetch.
+        assert body["cap_raise"]["changed"] is True
+        assert body["cap_raise"]["old_cap_cents"] == 10_000
+        assert body["cap_raise"]["new_cap_cents"] == 24_000
 
     # Business cap should now be wtd ($60) + amount ($80) + buffer ($100) = $240.
     await session.refresh(biz)

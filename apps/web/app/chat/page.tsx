@@ -70,11 +70,18 @@ export default function ChatPage() {
         body: JSON.stringify({ status, modifications: modifications ?? null }),
       });
       if (!res.ok) throw new Error(await res.text());
-      // Replace the approval card with a compact status line.
-      const label =
-        status === "modified" && modifications?.raise_weekly_cap
-          ? "approval:approved+cap_raised"
-          : `approval:${status}`;
+      const body = (await res.json()) as {
+        cap_raise?: { changed?: boolean; new_cap_cents?: number } | null;
+      };
+      let label = `approval:${status}`;
+      if (status === "modified" && modifications?.raise_weekly_cap) {
+        const cap = body.cap_raise;
+        const newCap =
+          cap && cap.changed && typeof cap.new_cap_cents === "number"
+            ? `$${(cap.new_cap_cents / 100).toFixed(0)}`
+            : null;
+        label = newCap ? `approval:approved · cap raised to ${newCap}` : "approval:approved";
+      }
       setParts((p) =>
         p.map((part) =>
           part.kind === "approval" && part.event.approval_id === approvalId

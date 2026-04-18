@@ -46,9 +46,11 @@ async def write(
       - 'message.agent'    — an agent response (streaming complete)
       - 'tool_call'        — agent invoked a tool
       - 'tool_result'      — tool returned a result
-      - 'approval_requested' / 'approval_granted' / 'approval_denied'
-      - 'spend' / 'spend_declined'
+      - 'approval_requested' / 'approval_approved' / 'approval_denied'
+        / 'approval_modified'
+      - 'spend_intent' / 'spend_authorized' / 'spend_declined'
       - 'kill_switch_activated'
+      - 'specialist_completed'
       - 'error'
     """
     row = AgentEvent(

@@ -25,6 +25,7 @@ type ApprovalPart = {
   business_id: string;
   expires_at: string;
   resolvedAs?: "approved" | "denied" | "approved+cap_raised";
+  newCapCents?: number;
 };
 
 type TurnPart =
@@ -118,7 +119,7 @@ export default function ChatScreen() {
       status === "denied" ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium,
     );
     try {
-      await respondToApproval(approvalId, status, modifications);
+      const result = await respondToApproval(approvalId, status, modifications);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const resolvedAs: ApprovalPart["resolvedAs"] =
         status === "modified" && modifications?.raise_weekly_cap
@@ -126,9 +127,13 @@ export default function ChatScreen() {
           : status === "modified"
             ? "approved"
             : status;
+      const newCapCents =
+        result.cap_raise && result.cap_raise.changed ? result.cap_raise.new_cap_cents : undefined;
       setParts((prev) =>
         prev.map((p) =>
-          p.kind === "approval" && p.approval_id === approvalId ? { ...p, resolvedAs } : p,
+          p.kind === "approval" && p.approval_id === approvalId
+            ? { ...p, resolvedAs, newCapCents }
+            : p,
         ),
       );
     } catch (e) {
@@ -249,10 +254,14 @@ function ApprovalCardInline({
   });
 
   if (part.resolvedAs) {
-    const label =
-      part.resolvedAs === "approved+cap_raised"
-        ? "approval approved + cap raised"
-        : `approval ${part.resolvedAs}`;
+    let label: string;
+    if (part.resolvedAs === "approved+cap_raised") {
+      label = part.newCapCents
+        ? `approval approved · cap raised to $${(part.newCapCents / 100).toFixed(0)}`
+        : "approval approved + cap raised";
+    } else {
+      label = `approval ${part.resolvedAs}`;
+    }
     return <Text style={[styles.toolLine, { color: colors.accent }]}>✓ {label}</Text>;
   }
 

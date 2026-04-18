@@ -322,6 +322,15 @@ export interface Approval {
   requested_at: string;
   responded_at: string | null;
   expires_at: string;
+  // Populated only on /respond responses when raise_weekly_cap changed the cap.
+  cap_raise?: {
+    changed: boolean;
+    old_cap_cents?: number;
+    new_cap_cents?: number;
+    wtd_cents?: number;
+    buffer_cents?: number;
+    reason?: string;
+  } | null;
 }
 
 export async function listApprovals(status?: Approval["status"]): Promise<Approval[]> {

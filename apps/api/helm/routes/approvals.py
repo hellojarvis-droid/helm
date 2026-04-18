@@ -47,9 +47,13 @@ class ApprovalResponse(BaseModel):
     requested_at: datetime
     responded_at: datetime | None
     expires_at: datetime
+    # Only populated when the user chose "approve & raise cap" on a spend
+    # approval and the cap actually changed. Present on /respond responses;
+    # null on list/get to keep the surface stable.
+    cap_raise: dict[str, Any] | None = None
 
     @classmethod
-    def from_row(cls, row: Approval) -> ApprovalResponse:
+    def from_row(cls, row: Approval, cap_raise: dict[str, Any] | None = None) -> ApprovalResponse:
         return cls(
             id=row.id,
             business_id=row.business_id,
@@ -60,6 +64,7 @@ class ApprovalResponse(BaseModel):
             requested_at=row.requested_at,
             responded_at=row.responded_at,
             expires_at=row.expires_at,
+            cap_raise=cap_raise,
         )
 
 
@@ -190,7 +195,7 @@ async def respond(
             payload=payload,
         )
 
-    return ApprovalResponse.from_row(row)
+    return ApprovalResponse.from_row(row, cap_raise=cap_raise_meta)
 
 
 async def _apply_cap_raise(db: AsyncSession, approval: Approval) -> dict[str, Any] | None:
