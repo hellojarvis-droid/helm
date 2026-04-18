@@ -22,26 +22,8 @@ _STUBS = [
     #   idea_scout        — specialists/idea_scout.py
     #   ads_operator      — specialists/ads_operator.py
     #   growth_analyst    — specialists/growth_analyst.py
-    StubSpecialist(
-        name="social_engagement",
-        persona_note="Social Engagement",
-        what_i_would_do=(
-            "poll the business's Instagram / TikTok / X / LinkedIn / Threads "
-            "every 2 minutes, reply to pre- and post-purchase questions on-brand, "
-            "and flag anything that needs CS, legal, or press escalation"
-        ),
-        online_in="Session 5",
-    ),
-    StubSpecialist(
-        name="customer_service",
-        persona_note="Customer Service",
-        what_i_would_do=(
-            "resolve Shopify order questions and Gorgias tickets within policy, "
-            "refund up to $50 without approval, and escalate anything involving "
-            "legal, injury, or unhappy VIPs"
-        ),
-        online_in="Session 5",
-    ),
+    #   social_engagement — specialists/social_engagement.py
+    #   customer_service  — specialists/customer_service.py
     StubSpecialist(
         name="finance_ops",
         persona_note="Finance & Ops",
@@ -50,7 +32,7 @@ _STUBS = [
             "monthly P&L into QuickBooks, and page you on card anomalies or "
             "near-cap spend"
         ),
-        online_in="Session 6",
+        online_in="Session 29",
     ),
 ]
 

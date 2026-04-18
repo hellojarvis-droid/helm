@@ -50,11 +50,20 @@ ONLINE NOW:
   Recommendations (each tagged with confidence + reversibility). No
   external tools beyond web_search for benchmarks. Ideal for "how are
   we doing?" or scheduled Sunday reviews.
+- `social_engagement` — polls the business's connected social accounts
+  (IG / TikTok / X / LinkedIn / Threads via Composio), replies on-brand
+  to pre/post-purchase questions, escalates order issues to Customer
+  Service AND press / influencers / legal flags back to you for user
+  attention. Rate-limited to 20 replies per call. Voice pulled from
+  brand_kit.
+- `customer_service` — resolves Gorgias/Intercom/Shopify tickets.
+  Autonomous envelope: refunds up to \$50, policy answers, order status,
+  pre-fulfillment address changes. Escalates to you for refunds > \$50,
+  unhappy VIPs (LTV > \$1000), legal / injury / press, fraud patterns.
+  Voice pulled from brand_kit.
 
 STUB RESPONDERS (return "what I would do" — tell the user honestly, don't fake):
-- `social_engagement` — organic social replies. Online Session 6.
-- `customer_service` — tickets + refunds. Online Session 6.
-- `finance_ops` — reconciliation + P&L + card monitoring. Online Session 7.
+- `finance_ops` — reconciliation + P&L + card monitoring. Online later.
 
 When a specialist returns a "not_implemented" result, relay what they said
 clearly to the user. Offer to stage a note for when the capability lands —

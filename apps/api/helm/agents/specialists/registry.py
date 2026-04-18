@@ -10,8 +10,10 @@ from __future__ import annotations
 from helm.agents.specialists import (  # noqa: F401 — import-for-side-effect
     ads_operator,
     creative_director,
+    customer_service,
     growth_analyst,
     idea_scout,
     product_builder,
+    social_engagement,
     stubs,
 )

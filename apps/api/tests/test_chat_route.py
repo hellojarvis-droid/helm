@@ -231,7 +231,7 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
 
     fake_user = CurrentUser(supabase_id="sub-chat-3", email="chat3@example.com", raw_claims={})
 
-    # Turn 1: CEO responds with tool_use calling customer_service (still stubbed).
+    # Turn 1: CEO responds with tool_use calling finance_ops (still stubbed).
     # Turn 2: CEO responds with text to the user using the stub's response.
     # We pick a still-stubbed specialist intentionally — real specialists
     # construct an Anthropic client at run-time and would fail in CI.
@@ -244,7 +244,7 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
                         "id": "tu_1",
                         "name": "delegate_to_specialist",
                         "input": {
-                            "specialist_name": "customer_service",
+                            "specialist_name": "finance_ops",
                             "task": "draft a reply to a shipping-delay ticket",
                         },
                     }
@@ -252,7 +252,7 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
                 "stop_reason": "tool_use",
             },
             {
-                "text": "Customer Service isn't online yet — here's what it would do: (relayed)",
+                "text": "Finance & Ops isn't online yet — here's what it would do: (relayed)",
                 "stop_reason": "end_turn",
             },
         ]
@@ -283,7 +283,7 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
 
     tool_call_event = next(e for e in events if e["kind"] == "tool_call")
     assert tool_call_event["name"] == "delegate_to_specialist"
-    assert tool_call_event["input"]["specialist_name"] == "customer_service"
+    assert tool_call_event["input"]["specialist_name"] == "finance_ops"
 
     # The specialist's completion should be in the event log.
     from helm.services.sessions import get_or_create_ceo_session
@@ -302,7 +302,7 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
         .all()
     )
     assert len(rows) == 1
-    assert rows[0].agent_name == "customer_service"
+    assert rows[0].agent_name == "finance_ops"
     assert rows[0].payload["status"] == "not_implemented"
 
 
