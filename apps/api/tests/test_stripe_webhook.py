@@ -160,6 +160,106 @@ async def test_payment_succeeded_logs_revenue_event(session, monkeypatch) -> Non
 
 @requires_db
 @pytest.mark.asyncio
+async def test_subscription_created_bumps_tier(session, monkeypatch) -> None:
+    """customer.subscription.created with a configured price → user.tier flips
+    to the mapped tier, subscription fields get populated.
+    """
+    from helm import config
+
+    user = User(
+        supabase_id="sub-sub-1",
+        email="sub1@example.com",
+        tier="founder",
+        stripe_customer_id="cus_test",
+    )
+    session.add(user)
+    await session.commit()
+
+    monkeypatch.setenv("STRIPE_PRICE_OPERATOR", "price_operator_test")
+    config.get_settings.cache_clear()
+
+    event = _mk_event(
+        "customer.subscription.created",
+        {
+            "id": "sub_test",
+            "customer": "cus_test",
+            "status": "active",
+            "items": {
+                "data": [
+                    {"price": {"id": "price_operator_test"}},
+                ]
+            },
+        },
+    )
+    monkeypatch.setattr(stripe_client, "verify_webhook", lambda body, sig: event)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post(
+            "/webhooks/stripe",
+            content=json.dumps(event).encode(),
+            headers={"stripe-signature": "t=1,v1=ok"},
+        )
+    assert r.status_code == 200, r.text
+
+    from helm.db.session import get_sessionmaker
+
+    sm = get_sessionmaker()
+    async with sm() as s2:
+        refreshed = (await s2.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.tier == "operator"
+        assert refreshed.subscription_status == "active"
+        assert refreshed.stripe_subscription_id == "sub_test"
+        assert refreshed.stripe_price_id == "price_operator_test"
+
+    config.get_settings.cache_clear()
+
+
+@requires_db
+@pytest.mark.asyncio
+async def test_subscription_deleted_resets_tier(session, monkeypatch) -> None:
+    """customer.subscription.deleted → tier drops back to founder + status='canceled'."""
+    user = User(
+        supabase_id="sub-sub-2",
+        email="sub2@example.com",
+        tier="operator",
+        stripe_customer_id="cus_cancel",
+        stripe_subscription_id="sub_cancel",
+        subscription_status="active",
+        stripe_price_id="price_op",
+    )
+    session.add(user)
+    await session.commit()
+
+    event = _mk_event(
+        "customer.subscription.deleted",
+        {"id": "sub_cancel", "customer": "cus_cancel", "status": "canceled", "items": {"data": []}},
+    )
+    monkeypatch.setattr(stripe_client, "verify_webhook", lambda body, sig: event)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post(
+            "/webhooks/stripe",
+            content=json.dumps(event).encode(),
+            headers={"stripe-signature": "t=1,v1=ok"},
+        )
+    assert r.status_code == 200, r.text
+
+    from helm.db.session import get_sessionmaker
+
+    sm = get_sessionmaker()
+    async with sm() as s2:
+        refreshed = (await s2.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.tier == "founder"
+        assert refreshed.subscription_status == "canceled"
+        assert refreshed.stripe_subscription_id is None
+
+
+@requires_db
+@pytest.mark.asyncio
 async def test_account_updated_keeps_incomplete_when_requirements_due(session, monkeypatch) -> None:
     user = User(supabase_id="sub-sw-2", email="sw2@example.com", tier="founder")
     session.add(user)

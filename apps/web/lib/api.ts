@@ -324,8 +324,20 @@ export interface BillingState {
   month_to_date_cost_cents: number;
 }
 
-export async function getBilling(): Promise<BillingState> {
+export async function getBilling(): Promise<BillingState & { subscription_status: string }> {
   const res = await apiFetch("/billing/me");
   if (!res.ok) throw new Error(`getBilling: ${res.status}`);
+  return res.json();
+}
+
+export async function startBillingCheckout(
+  targetTier: "founder" | "operator" | "portfolio",
+): Promise<{ url: string }> {
+  const res = await apiFetch("/billing/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_tier: targetTier }),
+  });
+  if (!res.ok) throw new Error(`startBillingCheckout: ${res.status} ${await res.text()}`);
   return res.json();
 }

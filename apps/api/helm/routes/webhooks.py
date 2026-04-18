@@ -26,9 +26,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.config import get_settings
-from helm.db.models import Business, Integration
+from helm.db.models import Business, Integration, User
 from helm.db.session import get_session
-from helm.services import event_log, stripe_authorization, stripe_client
+from helm.services import event_log, stripe_authorization, stripe_billing, stripe_client
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 log = structlog.get_logger("helm.webhooks")
@@ -181,6 +181,12 @@ async def stripe_webhook(
         return await _handle_authorization_request(db, data_obj)
     if event_type == "payment_intent.succeeded":
         return await _handle_payment_succeeded(db, data_obj)
+    if event_type in {
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+    }:
+        return await _handle_subscription_event(db, event_type, data_obj)
 
     # Unknown event type — ack so Stripe doesn't retry forever.
     return {"status": "ignored", "type": event_type}
@@ -268,6 +274,51 @@ async def _handle_authorization_request(
     if enforcement_error:
         body["enforcement_error"] = enforcement_error
     return body
+
+
+async def _handle_subscription_event(
+    db: AsyncSession, event_type: str, subscription: dict[str, Any]
+) -> dict[str, Any]:
+    """Keep users.tier + subscription state in sync with Stripe.
+
+    - created / updated with an active-ish status → user.tier = tier_for_price
+      and subscription_status = the Stripe status.
+    - deleted → tier resets to 'founder' (the most restrictive default)
+      and status = 'canceled'.
+    """
+    customer_id = stripe_billing.extract_customer_id(subscription)
+    if not customer_id:
+        return {"status": "ignored", "reason": "no customer id"}
+
+    res = await db.execute(select(User).where(User.stripe_customer_id == customer_id))
+    user = res.scalar_one_or_none()
+    if user is None:
+        # Could be a race where the checkout session created a customer on
+        # Stripe but our /billing/checkout row hadn't committed yet. Stripe
+        # retries, so acking is fine.
+        return {"status": "ignored", "reason": "no user for customer"}
+
+    status = str(subscription.get("status") or "").lower()
+    sub_id = subscription.get("id")
+    price_id = stripe_billing.extract_price_id(subscription)
+
+    if event_type == "customer.subscription.deleted":
+        user.subscription_status = "canceled"
+        user.stripe_subscription_id = None
+        user.stripe_price_id = None
+        user.tier = "founder"
+    else:
+        user.subscription_status = status or "unknown"
+        if isinstance(sub_id, str):
+            user.stripe_subscription_id = sub_id
+        if price_id:
+            user.stripe_price_id = price_id
+            new_tier = stripe_billing.tier_for_price(price_id)
+            if new_tier and status in {"active", "trialing", "past_due"}:
+                user.tier = new_tier
+
+    await db.commit()
+    return {"status": "ok", "subscription_status": user.subscription_status, "tier": user.tier}
 
 
 async def _handle_payment_succeeded(db: AsyncSession, intent: dict[str, Any]) -> dict[str, Any]:

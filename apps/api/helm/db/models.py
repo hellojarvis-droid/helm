@@ -50,6 +50,12 @@ class User(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     expo_push_token: Mapped[str | None] = mapped_column(String, nullable=True)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    subscription_status: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'inactive'")
+    )
+    stripe_price_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

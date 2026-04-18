@@ -5,17 +5,35 @@ import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
-import { type BillingState, getBilling } from "@/lib/api";
+import { type BillingState, getBilling, startBillingCheckout } from "@/lib/api";
+
+const UPGRADE_TIERS: { target: "operator" | "portfolio"; label: string }[] = [
+  { target: "operator", label: "Upgrade to Operator" },
+  { target: "portfolio", label: "Upgrade to Portfolio" },
+];
 
 export default function BillingPage() {
   const [state, setState] = useState<BillingState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busyTier, setBusyTier] = useState<string | null>(null);
 
   useEffect(() => {
     getBilling()
       .then(setState)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
+
+  async function goToCheckout(target: "operator" | "portfolio") {
+    setBusyTier(target);
+    setError(null);
+    try {
+      const { url } = await startBillingCheckout(target);
+      window.location.href = url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusyTier(null);
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -65,10 +83,17 @@ export default function BillingPage() {
                   upgrade lands in a later session.
                 </CardDescription>
               </CardHeader>
-              <div className="flex gap-2">
-                <Button variant="accent" disabled>
-                  Upgrade (coming soon)
-                </Button>
+              <div className="flex flex-wrap gap-2">
+                {UPGRADE_TIERS.filter((t) => t.target !== state.tier).map((t) => (
+                  <Button
+                    key={t.target}
+                    variant="accent"
+                    disabled={busyTier !== null}
+                    onClick={() => goToCheckout(t.target)}
+                  >
+                    {busyTier === t.target ? "Opening Stripe…" : t.label}
+                  </Button>
+                ))}
                 <a
                   href="mailto:support@helm.app?subject=Upgrade%20request"
                   className="inline-flex items-center justify-center h-10 px-4 text-sm rounded-md border border-iron/30 hover:bg-haze dark:hover:bg-ink/20"

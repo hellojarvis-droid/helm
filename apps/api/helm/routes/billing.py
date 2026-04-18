@@ -13,15 +13,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.auth import CurrentUser, require_user
+from helm.config import get_settings
 from helm.db.models import AgentEvent, Business
 from helm.db.session import get_session
-from helm.services import tier_limits
+from helm.services import stripe_billing, tier_limits
 from helm.services.user_sync import sync_user_from_supabase
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -36,6 +37,15 @@ class BillingState(BaseModel):
     # LLM tokens implied by cost_cents — rough only; exact usage tracking
     # comes with Stripe metered pricing in a later session.
     month_to_date_cost_cents: int
+    subscription_status: str
+
+
+class CheckoutRequest(BaseModel):
+    target_tier: str  # 'founder' | 'operator' | 'portfolio'
+
+
+class CheckoutResponse(BaseModel):
+    url: str
 
 
 @router.get("/me", response_model=BillingState)
@@ -76,4 +86,51 @@ async def get_billing(
         monthly_tokens=limits.monthly_tokens,
         businesses_used=businesses_used,
         month_to_date_cost_cents=cost_cents,
+        subscription_status=user_row.subscription_status,
     )
+
+
+@router.post("/checkout", response_model=CheckoutResponse)
+async def start_checkout(
+    body: CheckoutRequest,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_session),
+) -> CheckoutResponse:
+    """Create a Stripe Checkout Session for the target tier. Returns the URL
+    the client redirects to. Webhook (customer.subscription.created) flips
+    the user's tier + subscription fields once payment succeeds.
+    """
+    settings = get_settings()
+    price_map = {
+        "founder": settings.stripe_price_founder,
+        "operator": settings.stripe_price_operator,
+        "portfolio": settings.stripe_price_portfolio,
+    }
+    price_id = price_map.get(body.target_tier)
+    if not price_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"no Stripe price configured for tier '{body.target_tier}'",
+        )
+
+    user_row = await sync_user_from_supabase(db, user)
+    customer_id = await stripe_billing.get_or_create_customer(
+        user_id=str(user_row.id),
+        email=user_row.email,
+        existing=user_row.stripe_customer_id,
+    )
+    if user_row.stripe_customer_id != customer_id:
+        user_row.stripe_customer_id = customer_id
+        await db.commit()
+
+    try:
+        url = await stripe_billing.create_checkout_session(
+            customer_id=customer_id,
+            price_id=price_id,
+            success_url=settings.billing_success_url,
+            cancel_url=settings.billing_cancel_url,
+        )
+    except Exception as e:  # surface as 502 so the client can retry
+        raise HTTPException(status_code=502, detail=f"stripe checkout failed: {e}") from e
+
+    return CheckoutResponse(url=url)

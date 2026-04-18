@@ -74,6 +74,19 @@ class Settings(BaseSettings):
     # sends in dev.
     expo_access_token: str = Field("", alias="EXPO_ACCESS_TOKEN")
 
+    # Stripe Billing price IDs — one per tier. Set after creating the
+    # products/prices in Stripe. Empty strings mean the upgrade to that
+    # tier via Checkout is unavailable.
+    stripe_price_founder: str = Field("", alias="STRIPE_PRICE_FOUNDER")
+    stripe_price_operator: str = Field("", alias="STRIPE_PRICE_OPERATOR")
+    stripe_price_portfolio: str = Field("", alias="STRIPE_PRICE_PORTFOLIO")
+    billing_success_url: str = Field(
+        "http://localhost:3000/billing?status=success", alias="BILLING_SUCCESS_URL"
+    )
+    billing_cancel_url: str = Field(
+        "http://localhost:3000/billing?status=cancel", alias="BILLING_CANCEL_URL"
+    )
+
     # Phase 1+ — not yet exercised
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
     composio_api_key: str = Field("", alias="COMPOSIO_API_KEY")
