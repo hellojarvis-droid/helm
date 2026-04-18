@@ -232,6 +232,8 @@ class SpendSummary(BaseModel):
     remaining_cents: int
     llm_cost_cents: int
     declined_count: int
+    revenue_wtd_cents: int
+    net_wtd_cents: int
     window_days: int
     since: datetime
 
@@ -285,12 +287,25 @@ async def get_spend(
     )
     declined = int(declined_q.scalar() or 0)
 
+    # Revenue — payment_intent.succeeded webhook writes cost_cents as the
+    # negative inflow. Sum and flip sign to report positive revenue.
+    rev_q = await db.execute(
+        select(func.coalesce(func.sum(AgentEvent.cost_cents), 0)).where(
+            AgentEvent.business_id == business_id,
+            AgentEvent.event_type == "revenue_received",
+            AgentEvent.created_at >= since,
+        )
+    )
+    revenue = -int(rev_q.scalar() or 0)
+
     return SpendSummary(
         weekly_cap_cents=biz.weekly_spend_cap_cents,
         week_to_date_cents=wtd,
         remaining_cents=max(biz.weekly_spend_cap_cents - wtd, 0),
         llm_cost_cents=llm,
         declined_count=declined,
+        revenue_wtd_cents=revenue,
+        net_wtd_cents=revenue - wtd,
         window_days=7,
         since=since,
     )

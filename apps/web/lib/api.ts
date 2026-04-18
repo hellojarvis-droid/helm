@@ -174,6 +174,8 @@ export interface SpendSummary {
   remaining_cents: number;
   llm_cost_cents: number;
   declined_count: number;
+  revenue_wtd_cents: number;
+  net_wtd_cents: number;
   window_days: number;
   since: string;
 }

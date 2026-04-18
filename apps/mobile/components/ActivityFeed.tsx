@@ -69,6 +69,7 @@ const BADGE: Record<string, Badge> = {
     fg: colors.danger,
     border: "rgba(168,37,26,0.35)",
   },
+  revenue_received: { label: "revenue", bg: colors.success, fg: colors.paper },
   specialist_completed: {
     label: "specialist",
     bg: colors.haze,
@@ -220,6 +221,8 @@ function summarize(ev: AgentEvent): string {
       )} to ${stringOr(p.merchant_name, stringOr(p.merchant_category, "?"))}`;
     case "spend_declined":
       return `Declined: ${stringOr(p.reason, "spend policy")}`;
+    case "revenue_received":
+      return `Revenue: $${((Number(p.amount_cents) || 0) / 100).toFixed(2)}`;
     case "specialist_completed":
       return `${stringOr(p.name, "specialist")} → ${stringOr(p.status, "ok")}`;
     case "kill_switch_activated":

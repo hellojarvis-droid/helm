@@ -64,6 +64,17 @@ async def test_spend_summary(session) -> None:
             payload={"text": "…"},
             cost_cents=llm_cost,
         )
+    # Revenue inflow: $150 + $80 = $230
+    for rev in (15_000, 8_000):
+        await event_log.write(
+            session,
+            session_id=ag.id,
+            business_id=biz.id,
+            event_type="revenue_received",
+            agent_name="stripe",
+            payload={"amount_cents": rev},
+            cost_cents=-rev,
+        )
 
     fake = CurrentUser(supabase_id="sub-sp-1", email="sp@example.com", raw_claims={})
     app = create_app()
@@ -82,6 +93,8 @@ async def test_spend_summary(session) -> None:
         assert body["remaining_cents"] == 40_800
         assert body["llm_cost_cents"] == 7
         assert body["declined_count"] == 1
+        assert body["revenue_wtd_cents"] == 23_000  # $150 + $80
+        assert body["net_wtd_cents"] == 13_800  # 23_000 - 9_200
         assert body["window_days"] == 7
 
 

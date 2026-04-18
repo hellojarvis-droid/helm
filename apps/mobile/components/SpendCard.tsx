@@ -36,7 +36,15 @@ export function SpendCard({ businessId }: { businessId: string }) {
       </View>
 
       <View style={styles.metaRow}>
-        <Meta k="Window" v={`${s.window_days}d`} />
+        <Meta k={`Revenue ${s.window_days}d`} v={dollars(s.revenue_wtd_cents)} success />
+        <Meta
+          k="Net"
+          v={`${s.net_wtd_cents >= 0 ? "+" : "−"}${dollars(Math.abs(s.net_wtd_cents))}`}
+          success={s.net_wtd_cents >= 0}
+          danger={s.net_wtd_cents < 0}
+        />
+      </View>
+      <View style={styles.metaRow}>
         <Meta k="LLM cost" v={cents(s.llm_cost_cents)} />
         {s.declined_count > 0 ? <Meta k="Declined" v={String(s.declined_count)} danger /> : null}
       </View>
@@ -44,11 +52,29 @@ export function SpendCard({ businessId }: { businessId: string }) {
   );
 }
 
-function Meta({ k, v, danger }: { k: string; v: string; danger?: boolean }) {
+function Meta({
+  k,
+  v,
+  danger,
+  success,
+}: {
+  k: string;
+  v: string;
+  danger?: boolean;
+  success?: boolean;
+}) {
   return (
     <View>
       <Text style={styles.metaKey}>{k}</Text>
-      <Text style={[styles.metaVal, danger && { color: colors.danger }]}>{v}</Text>
+      <Text
+        style={[
+          styles.metaVal,
+          danger && { color: colors.danger },
+          success && { color: colors.success },
+        ]}
+      >
+        {v}
+      </Text>
     </View>
   );
 }

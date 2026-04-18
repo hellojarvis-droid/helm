@@ -66,8 +66,15 @@ export function SpendCard({ businessId }: { businessId: string }) {
 
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
         <div>
-          <dt className="text-iron">Window</dt>
-          <dd className="tabular">{s.window_days}d</dd>
+          <dt className="text-iron">Revenue {s.window_days}d</dt>
+          <dd className="tabular text-success">{dollars(s.revenue_wtd_cents)}</dd>
+        </div>
+        <div>
+          <dt className="text-iron">Net</dt>
+          <dd className={`tabular ${s.net_wtd_cents >= 0 ? "text-success" : "text-danger"}`}>
+            {s.net_wtd_cents >= 0 ? "+" : "−"}
+            {dollars(Math.abs(s.net_wtd_cents))}
+          </dd>
         </div>
         <div>
           <dt className="text-iron">LLM cost</dt>

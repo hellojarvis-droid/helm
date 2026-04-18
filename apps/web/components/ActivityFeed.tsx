@@ -37,6 +37,10 @@ const EVENT_BADGE: Record<string, { label: string; className: string }> = {
     label: "spend declined",
     className: "bg-danger/10 text-danger border border-danger/40",
   },
+  revenue_received: {
+    label: "revenue",
+    className: "bg-success text-paper",
+  },
   specialist_completed: {
     label: "specialist",
     className: "bg-haze text-ink border border-iron/20",
@@ -178,6 +182,8 @@ function summarize(ev: AgentEvent): string {
       return `Spend authorized: $${((Number(p.amount_cents) || 0) / 100).toFixed(2)} to ${stringOr(p.merchant_name, stringOr(p.merchant_category, "?"))}`;
     case "spend_declined":
       return `Declined: ${stringOr(p.reason, "spend policy")}`;
+    case "revenue_received":
+      return `Revenue: $${((Number(p.amount_cents) || 0) / 100).toFixed(2)}`;
     case "specialist_completed":
       return `${stringOr(p.name, "specialist")} → ${stringOr(p.status, "ok")}`;
     case "kill_switch_activated":
