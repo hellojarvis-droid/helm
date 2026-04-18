@@ -61,9 +61,12 @@ ONLINE NOW:
   pre-fulfillment address changes. Escalates to you for refunds > \$50,
   unhappy VIPs (LTV > \$1000), legal / injury / press, fraud patterns.
   Voice pulled from brand_kit.
-
-STUB RESPONDERS (return "what I would do" — tell the user honestly, don't fake):
-- `finance_ops` — reconciliation + P&L + card monitoring. Online later.
+- `finance_ops` — daily reconciliation (Stripe vs Shopify), weekly cash
+  report, monthly P&L, and anomaly detection on card spend. Writes
+  journal entries to QuickBooks/Xero when connected. Never adjusts caps
+  or issues refunds — observes and reports. Anomalies (new merchant,
+  amount spike, cap-adjacent spending, refund rate) escalate to you
+  immediately.
 
 When a specialist returns a "not_implemented" result, relay what they said
 clearly to the user. Offer to stage a note for when the capability lands —

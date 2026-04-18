@@ -224,17 +224,32 @@ async def test_chat_returns_error_when_kill_switch_is_on(session, monkeypatch) -
 @requires_db
 @pytest.mark.asyncio
 async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
-    """CEO calls delegate_to_specialist → stub returns 'not_implemented' → CEO relays."""
+    """CEO calls delegate_to_specialist → stub returns 'not_implemented' → CEO relays.
+
+    All 8 production specialists are real LLMSpecialists now — they'd all try
+    to hit Anthropic in CI. We register a synthetic stub for the duration of
+    this test to exercise the CEO→delegate→stub_response→relay flow without
+    network.
+    """
+    # Every production specialist is a real LLMSpecialist; swap in a synthetic
+    # StubSpecialist for the duration of this test so no network is needed.
+    from helm.agents.specialists import base as specialists_base
+
+    stub = specialists_base.StubSpecialist(
+        name="finance_ops",
+        persona_note="Finance & Ops",
+        what_i_would_do="reconcile charges and flag anomalies (test stub)",
+    )
+    monkeypatch.setitem(specialists_base._REGISTRY, "finance_ops", stub)
+
     user = User(supabase_id="sub-chat-3", email="chat3@example.com", tier="founder")
     session.add(user)
     await session.commit()
 
     fake_user = CurrentUser(supabase_id="sub-chat-3", email="chat3@example.com", raw_claims={})
 
-    # Turn 1: CEO responds with tool_use calling finance_ops (still stubbed).
+    # Turn 1: CEO responds with tool_use calling the test stub.
     # Turn 2: CEO responds with text to the user using the stub's response.
-    # We pick a still-stubbed specialist intentionally — real specialists
-    # construct an Anthropic client at run-time and would fail in CI.
     seq = _SequenceStreamClient(
         responses=[
             {
@@ -245,7 +260,7 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
                         "name": "delegate_to_specialist",
                         "input": {
                             "specialist_name": "finance_ops",
-                            "task": "draft a reply to a shipping-delay ticket",
+                            "task": "reconcile yesterday's charges",
                         },
                     }
                 ],
