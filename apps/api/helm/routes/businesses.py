@@ -21,7 +21,7 @@ from helm.config import get_settings
 from helm.db.models import AgentEvent, Business
 from helm.db.session import get_session
 from helm.db.tenant import get_business_for_user, list_businesses_for_user
-from helm.services import stripe_client
+from helm.services import stripe_client, tier_limits
 from helm.services.user_sync import sync_user_from_supabase
 
 router = APIRouter(prefix="/businesses", tags=["businesses"])
@@ -103,6 +103,30 @@ async def create_business(
     if body.vertical not in VERTICALS:
         raise HTTPException(status_code=422, detail=f"vertical must be one of {sorted(VERTICALS)}")
     user_row = await sync_user_from_supabase(db, user)
+
+    # Enforce the tier's max_businesses cap. 0 == unlimited.
+    limits = tier_limits.get_limits(user_row.tier)
+    if limits.max_businesses > 0:
+        count_q = await db.execute(
+            select(func.count()).select_from(Business).where(Business.user_id == user_row.id)
+        )
+        current = int(count_q.scalar() or 0)
+        if current >= limits.max_businesses:
+            raise HTTPException(
+                status_code=402,  # Payment Required — indicates upgrade path
+                detail={
+                    "error": "tier_limit_exceeded",
+                    "tier": user_row.tier,
+                    "limit": "max_businesses",
+                    "current": current,
+                    "allowed": limits.max_businesses,
+                    "message": (
+                        f"'{limits.display_name}' tier is limited to "
+                        f"{limits.max_businesses} businesses — upgrade to create more."
+                    ),
+                },
+            )
+
     biz = Business(
         user_id=user_row.id,
         name=body.name,

@@ -19,6 +19,7 @@ from helm.logging import configure_logging
 from helm.middleware import CorrelationIdMiddleware
 from helm.routes import approvals as approvals_routes
 from helm.routes import auth as auth_routes
+from helm.routes import billing as billing_routes
 from helm.routes import businesses as businesses_routes
 from helm.routes import chat as chat_routes
 from helm.routes import health as health_routes
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(webhooks_routes.router)
     app.include_router(stripe_routes.router)
     app.include_router(today_routes.router)
+    app.include_router(billing_routes.router)
     return app
 
 
