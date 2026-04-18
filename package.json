@@ -21,7 +21,10 @@
     "api:format": "cd apps/api && uv run ruff format .",
     "api:typecheck": "cd apps/api && uv run mypy helm",
     "migrate": "cd apps/api && uv run alembic upgrade head",
-    "migrate:new": "cd apps/api && uv run alembic revision --autogenerate -m"
+    "migrate:new": "cd apps/api && uv run alembic revision --autogenerate -m",
+    "web:dev": "pnpm --filter @helm/web dev",
+    "web:build": "pnpm --filter @helm/web build",
+    "web:typecheck": "pnpm --filter @helm/web typecheck"
   },
   "devDependencies": {
     "prettier": "^3.4.2",

@@ -73,6 +73,12 @@ jobs:
   web:
     name: Web (JS/TS)
     runs-on: ubuntu-latest
+    env:
+      # Build-time placeholders — client bundle must resolve these at compile,
+      # but they don't hit any real service in CI.
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder_anon_key_for_ci_builds_only
+      NEXT_PUBLIC_HELM_API_BASE: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
 

@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  html,
+  body {
+    background: theme("colors.paper");
+    color: theme("colors.ink");
+    font-family: theme("fontFamily.sans");
+    font-feature-settings: "cv11", "ss01";
+  }
+  @media (prefers-color-scheme: dark) {
+    html,
+    body {
+      background: theme("colors.ink");
+      color: theme("colors.paper");
+    }
+  }
+  /* Tabular numerals so dollar amounts don't jump as they stream. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
