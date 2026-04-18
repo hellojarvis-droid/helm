@@ -306,6 +306,7 @@ async def _handle_subscription_event(
         user.subscription_status = "canceled"
         user.stripe_subscription_id = None
         user.stripe_price_id = None
+        user.stripe_metered_item_id = None
         user.tier = "founder"
     else:
         user.subscription_status = status or "unknown"
@@ -316,6 +317,10 @@ async def _handle_subscription_event(
             new_tier = stripe_billing.tier_for_price(price_id)
             if new_tier and status in {"active", "trialing", "past_due"}:
                 user.tier = new_tier
+        # Capture the metered SubscriptionItem ID (if any) so usage_reporter
+        # knows where to post records. Reset to None when the new sub has
+        # no metered component.
+        user.stripe_metered_item_id = stripe_billing.extract_metered_item_id(subscription)
 
     await db.commit()
     return {"status": "ok", "subscription_status": user.subscription_status, "tier": user.tier}

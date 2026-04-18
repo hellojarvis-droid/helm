@@ -56,6 +56,10 @@ class User(Base):
         String, nullable=False, server_default=text("'inactive'")
     )
     stripe_price_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    stripe_metered_item_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_usage_reported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

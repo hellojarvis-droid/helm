@@ -124,6 +124,29 @@ def extract_price_id(subscription: dict[str, Any]) -> str | None:
     return None
 
 
+def extract_metered_item_id(subscription: dict[str, Any]) -> str | None:
+    """Pull the SubscriptionItem ID for the metered usage component (the
+    item whose price.recurring.usage_type === 'metered'). Returns None when
+    no metered item is present (flat-only plan)."""
+    items = subscription.get("items") or {}
+    data = items.get("data") if isinstance(items, dict) else None
+    if not isinstance(data, list):
+        return None
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        price = item.get("price")
+        if not isinstance(price, dict):
+            continue
+        recurring = price.get("recurring")
+        if not isinstance(recurring, dict):
+            continue
+        if recurring.get("usage_type") == "metered":
+            iid = item.get("id")
+            return str(iid) if iid else None
+    return None
+
+
 def extract_customer_id(subscription: dict[str, Any]) -> str | None:
     val = subscription.get("customer")
     if isinstance(val, str):

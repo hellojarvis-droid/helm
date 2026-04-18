@@ -41,7 +41,7 @@ import helm.agents.specialists.registry  # noqa: F401
 from helm.agents.tools import CEO_TOOL_IMPLS, CEO_TOOLS, ToolContext
 from helm.config import get_settings
 from helm.db.models import AgentEvent
-from helm.services import event_log, kill_switch, tracing
+from helm.services import event_log, kill_switch, tracing, usage_reporter
 
 log = structlog.get_logger("helm.runtime")
 
@@ -198,6 +198,9 @@ class MessagesRuntime:
                     "cost_cents": _cost_cents(state.input_tokens, state.output_tokens),
                 },
             )
+            # Fire-and-forget metered-usage report. No-op when the user has
+            # no metered SubscriptionItem or when Stripe isn't configured.
+            usage_reporter.schedule_report(str(user_id))
             yield ChatEvent("done", {})
         except kill_switch.KillSwitchActivated:
             await event_log.write(
