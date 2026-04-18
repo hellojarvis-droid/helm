@@ -246,6 +246,12 @@ function Footer() {
         <Link href={{ pathname: "/pricing" }} className="hover:text-ink">
           Pricing
         </Link>
+        <Link href={{ pathname: "/terms" }} className="hover:text-ink">
+          Terms
+        </Link>
+        <Link href={{ pathname: "/privacy" }} className="hover:text-ink">
+          Privacy
+        </Link>
         <a href="mailto:hello@helm.app" className="hover:text-ink">
           Contact
         </a>
