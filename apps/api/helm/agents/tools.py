@@ -6,6 +6,7 @@ Tools the CEO Agent can invoke mid-turn:
   - delegate_to_specialist (the orchestrator primitive)
   - request_user_approval (insert row + emit SSE event)
   - create_business (insert businesses row, after approval)
+  - request_spend (record spending intent before a merchant purchase)
 
 Every tool implementation takes a `ToolContext` carrying the tenant scope, the
 DB session, and an output list for side-channel SSE events (used by the
@@ -158,6 +159,54 @@ CEO_TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": ["name", "vertical"],
+        },
+    },
+    {
+        "name": "request_spend",
+        "description": (
+            "Record spending intent BEFORE initiating a merchant purchase with "
+            "the business's Stripe-issued card. Writes a `spend_intent` event "
+            "linked to the business, with amount + merchant_hint + purpose. "
+            "When Stripe later sends the real authorization request on the "
+            "merchant's charge, our webhook correlates it to the intent as "
+            "defense-in-depth against an agent going off-script.\n\n"
+            "You still must call request_user_approval FIRST for any spend that "
+            "crosses an approval threshold — this tool records the intent, it "
+            "does NOT perform the charge. Stripe does that when the merchant "
+            "submits the actual transaction.\n\n"
+            "Returns {intent_id, ok}."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "business_id": {
+                    "type": "string",
+                    "description": "UUID of the business whose card will be charged.",
+                },
+                "amount_cents": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000,
+                    "description": "Expected charge in cents (e.g. 34000 = $340.00).",
+                },
+                "merchant_hint": {
+                    "type": "string",
+                    "description": (
+                        "Who you expect to charge (e.g. 'Meta Ads', 'Printful'). "
+                        "The real merchant_data in the Stripe authorization may differ "
+                        "slightly; this is a hint for correlation."
+                    ),
+                },
+                "purpose": {
+                    "type": "string",
+                    "description": (
+                        "One-sentence reason for the spend. Lands in the event log "
+                        "and the audit trail. Example: 'Meta Smart+ test for "
+                        "candle-store launch, 72h run, $340 total.'"
+                    ),
+                },
+            },
+            "required": ["business_id", "amount_cents", "merchant_hint", "purpose"],
         },
     },
     {
@@ -365,12 +414,68 @@ async def _create_business(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
     }
 
 
+async def _request_spend(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    biz_arg = args.get("business_id")
+    if not isinstance(biz_arg, str) or not biz_arg:
+        return {"status": "error", "summary": "business_id is required"}
+    try:
+        biz_id = uuid.UUID(biz_arg)
+    except ValueError:
+        return {"status": "error", "summary": f"business_id '{biz_arg}' is not a valid UUID"}
+
+    amount = args.get("amount_cents")
+    if not isinstance(amount, int) or amount <= 0:
+        return {"status": "error", "summary": "amount_cents must be a positive integer"}
+
+    merchant = args.get("merchant_hint")
+    purpose = args.get("purpose")
+    if not isinstance(merchant, str) or not merchant.strip():
+        return {"status": "error", "summary": "merchant_hint is required"}
+    if not isinstance(purpose, str) or not purpose.strip():
+        return {"status": "error", "summary": "purpose is required"}
+
+    # Verify the business belongs to the caller (defense-in-depth; the CEO
+    # session is already user-scoped but args come from the model).
+    biz_row = await ctx.db.execute(
+        __import__("sqlalchemy")
+        .select(Business)
+        .where(Business.id == biz_id, Business.user_id == ctx.user_id)
+    )
+    biz = biz_row.scalar_one_or_none()
+    if biz is None:
+        return {"status": "error", "summary": "business not found for this user"}
+
+    logged = await event_log.write(
+        ctx.db,
+        session_id=ctx.session_id,
+        business_id=biz_id,
+        event_type="spend_intent",
+        agent_name="ceo_agent",
+        payload={
+            "amount_cents": amount,
+            "merchant_hint": merchant.strip(),
+            "purpose": purpose.strip(),
+        },
+    )
+    return {
+        "status": "ok",
+        "intent_id": logged.id,
+        "amount_cents": amount,
+        "note": (
+            "Intent recorded. The actual charge goes through Stripe when the "
+            "merchant submits the transaction; our authorization webhook will "
+            "correlate on the merchant_hint + amount."
+        ),
+    }
+
+
 CEO_TOOL_IMPLS: dict[str, ToolFn] = {
     "get_current_time": _get_current_time,
     "query_event_log": _query_event_log,
     "delegate_to_specialist": _delegate_to_specialist,
     "request_user_approval": _request_user_approval,
     "create_business": _create_business,
+    "request_spend": _request_spend,
 }
 
 

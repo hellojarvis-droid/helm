@@ -205,6 +205,47 @@ async def create_issuing_card(
     return await _in_thread(_create)
 
 
+async def approve_authorization(
+    authorization_id: str,
+    account_id: str,
+) -> None:
+    """Enforce an approved decision at Stripe's edge.
+
+    Stripe sends `issuing_authorization.request` and waits for our decision.
+    The webhook HTTP response body is advisory only — the binding decision
+    happens via this server-to-server call against the Issuing API on the
+    connected account.
+    """
+    s = _configured_stripe()
+
+    def _approve() -> None:
+        s.issuing.Authorization.approve(authorization_id, stripe_account=account_id)
+
+    await _in_thread(_approve)
+
+
+async def decline_authorization(
+    authorization_id: str,
+    account_id: str,
+    reason: str | None = None,
+) -> None:
+    """Enforce a declined decision at Stripe's edge.
+
+    Stripe accepts an optional free-form reason that surfaces in the dashboard
+    for later review. We pass our decision's reason string through so the
+    audit trail is complete.
+    """
+    s = _configured_stripe()
+
+    def _decline() -> None:
+        kwargs: dict[str, Any] = {"stripe_account": account_id}
+        if reason:
+            kwargs["metadata"] = {"helm_decline_reason": reason}
+        s.issuing.Authorization.decline(authorization_id, **kwargs)
+
+    await _in_thread(_decline)
+
+
 # ────────────────────────────────────────────────────────────────────
 # Webhooks
 # ────────────────────────────────────────────────────────────────────

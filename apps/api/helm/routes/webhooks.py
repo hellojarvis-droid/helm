@@ -215,19 +215,24 @@ async def _handle_account_updated(db: AsyncSession, account: dict[str, Any]) -> 
 async def _handle_authorization_request(
     db: AsyncSession, auth_obj: dict[str, Any]
 ) -> dict[str, Any]:
-    """Synchronously decide a Stripe Issuing authorization.
+    """Synchronously decide a Stripe Issuing authorization AND enforce it.
 
     Stripe expects a response within 2 seconds. Our decision tree is all
-    in-process Postgres reads; latency is bounded by one SELECT against
-    `businesses` + one aggregate SELECT against `agent_events`. The caller
-    should use this response body to shape the Stripe API reply in a
-    separate server-to-server call — Stripe's own webhook is one-way.
+    in-process Postgres reads; latency is bounded by one SELECT on
+    `businesses` + one aggregate SELECT on `agent_events`.
+
+    The webhook HTTP response body is advisory. The BINDING decision is the
+    follow-up server-to-server `Issuing.Authorization.approve/decline` call
+    we issue immediately after. If that enforcement fails we still return 200
+    with the decision in the body — a 5xx storm-retry is worse than a stale
+    decision (Stripe's own fallback `default` on the card still applies).
     """
     merchant = auth_obj.get("merchant_data") or {}
     amount_cents = int(auth_obj.get("pending_request", {}).get("amount", 0) or 0)
     category = merchant.get("category")
     name = merchant.get("name")
     account_id = str(auth_obj.get("stripe_account") or auth_obj.get("account") or "")
+    authorization_id = str(auth_obj.get("id") or "")
 
     decision = await stripe_authorization.decide_authorization(
         db,
@@ -237,14 +242,32 @@ async def _handle_authorization_request(
         merchant_name=name,
     )
 
-    # The response body is informational; the real approve/decline has to be
-    # sent back via Issuing.Authorization.approve/decline on the authorization
-    # object. Session 8 wires that side channel; for now we just log + return.
-    return {
+    enforcement_error: str | None = None
+    if authorization_id and account_id:
+        try:
+            if decision.approved:
+                await stripe_client.approve_authorization(authorization_id, account_id)
+            else:
+                await stripe_client.decline_authorization(
+                    authorization_id, account_id, reason=decision.reason
+                )
+        except Exception as e:
+            log.error(
+                "stripe.authorization_enforcement_failed",
+                auth_id=authorization_id,
+                err=str(e)[:300],
+                approved=decision.approved,
+            )
+            enforcement_error = str(e)[:200]
+
+    body: dict[str, Any] = {
         "approved": decision.approved,
         "reason": decision.reason,
         "amount_cents": decision.amount_cents,
     }
+    if enforcement_error:
+        body["enforcement_error"] = enforcement_error
+    return body
 
 
 async def _handle_payment_succeeded(db: AsyncSession, intent: dict[str, Any]) -> dict[str, Any]:
