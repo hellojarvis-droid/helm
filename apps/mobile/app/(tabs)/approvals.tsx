@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { PausedBanner } from "@/components/PausedBanner";
 import { listApprovals, respondToApproval, type Approval } from "@/lib/api";
 import { colors } from "@/lib/colors";
 
@@ -59,6 +60,7 @@ export default function ApprovalsScreen() {
 
   return (
     <View style={styles.container}>
+      <PausedBanner />
       <View style={styles.tabs}>
         {TABS.map((t) => (
           <Pressable

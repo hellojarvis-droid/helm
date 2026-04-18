@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { PausedBanner } from "@/components/PausedBanner";
 import { createBusiness, listBusinesses, type Business } from "@/lib/api";
 import { colors } from "@/lib/colors";
 
@@ -33,6 +34,7 @@ export default function BusinessesScreen() {
 
   return (
     <View style={styles.container}>
+      <PausedBanner />
       <FlatList
         data={rows ?? []}
         keyExtractor={(b) => b.id}
