@@ -174,6 +174,95 @@ async def test_approval_modified_raises_weekly_cap(session) -> None:
 
 @requires_db
 @pytest.mark.asyncio
+async def test_cap_raise_syncs_to_stripe_when_card_exists(session, monkeypatch) -> None:
+    """When the business has an Issuing card and the user raises the cap,
+    the new limit is pushed to Stripe so the card's own spending_controls
+    stay in sync with our DB cap.
+    """
+    from helm import config
+    from helm.services import event_log
+    from helm.services import stripe_client as stripe_module
+
+    user = User(supabase_id="sub-sync", email="sync@example.com", tier="founder")
+    session.add(user)
+    await session.flush()
+    biz = Business(
+        user_id=user.id,
+        name="Candle Co",
+        vertical="dtc_physical",
+        weekly_spend_cap_cents=10_000,  # $100
+        stripe_account_id="acct_test",
+        stripe_card_id="ic_test",
+    )
+    session.add(biz)
+    await session.flush()
+    ag = AgentSession(user_id=user.id, business_id=biz.id, status="active")
+    session.add(ag)
+    await session.flush()
+    approval = Approval(
+        business_id=biz.id,
+        kind="spend",
+        summary="Spend $80 on Meta Ads.",
+        details={"amount_cents": 8_000, "merchant_hint": "Meta"},
+        status="pending",
+        expires_at=datetime.now(UTC) + timedelta(hours=24),
+    )
+    session.add(approval)
+    await session.commit()
+    # A prior $60 authorized so wtd math matches the non-stripe test.
+    await event_log.write(
+        session,
+        session_id=ag.id,
+        business_id=biz.id,
+        event_type="spend_authorized",
+        agent_name="stripe_authorization",
+        payload={},
+        cost_cents=6_000,
+    )
+    await session.commit()
+
+    # Enable Issuing for this test, and stub the Stripe SDK call.
+    calls: list[dict[str, object]] = []
+
+    async def _fake_update(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(stripe_module, "update_issuing_weekly_cap", _fake_update)
+
+    # Flip the settings flag. get_settings is cached via lru_cache; clear it.
+    monkeypatch.setenv("STRIPE_ISSUING_ENABLED", "true")
+    config.get_settings.cache_clear()
+
+    fake_user = CurrentUser(supabase_id=user.supabase_id, email=user.email, raw_claims={})
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: fake_user
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post(
+            f"/approvals/{approval.id}/respond",
+            json={"status": "modified", "modifications": {"raise_weekly_cap": True}},
+            headers={"Authorization": "Bearer stub"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+
+    cap_raise = body["cap_raise"]
+    assert cap_raise["changed"] is True
+    assert cap_raise["new_cap_cents"] == 24_000  # wtd $60 + amt $80 + $100 buf
+    assert cap_raise["stripe_sync"]["attempted"] is True
+    assert cap_raise["stripe_sync"]["synced"] is True
+
+    assert len(calls) == 1
+    assert calls[0]["account_id"] == "acct_test"
+    assert calls[0]["card_id"] == "ic_test"
+    assert calls[0]["weekly_spend_cap_cents"] == 24_000
+
+    config.get_settings.cache_clear()
+
+
+@requires_db
+@pytest.mark.asyncio
 async def test_approval_denied_locks_out_retry(session) -> None:
     user, _, approval = await _seed_user_with_pending_approval(session)
 

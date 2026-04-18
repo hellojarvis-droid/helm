@@ -205,6 +205,38 @@ async def create_issuing_card(
     return await _in_thread(_create)
 
 
+async def update_issuing_weekly_cap(
+    account_id: str,
+    card_id: str,
+    weekly_spend_cap_cents: int,
+) -> None:
+    """Push a new weekly spending cap onto an Issuing card.
+
+    Our DB cap + stripe_authorization.decide_authorization decides synchronous
+    approvals. But Stripe also enforces spending_limits on the card itself at
+    its edge — if the DB cap is raised without pushing here, the real merchant
+    transaction will still decline. Called from the approval "raise cap" flow
+    and any manual cap change.
+    """
+    settings = get_settings()
+    if not settings.stripe_issuing_enabled:
+        raise RuntimeError("Issuing not yet enabled")
+    s = _configured_stripe()
+
+    def _update() -> None:
+        s.issuing.Card.modify(
+            card_id,
+            stripe_account=account_id,
+            spending_controls={
+                "spending_limits": [
+                    {"amount": weekly_spend_cap_cents, "interval": "weekly"},
+                ],
+            },
+        )
+
+    await _in_thread(_update)
+
+
 async def approve_authorization(
     authorization_id: str,
     account_id: str,

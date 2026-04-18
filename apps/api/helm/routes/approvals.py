@@ -1,13 +1,13 @@
 """Approvals REST endpoints.
 
 The CEO Agent produces approval cards via `request_user_approval`; the user
-responds here. Response writes an `approval_granted` / `approval_denied` /
+responds here. Response writes an `approval_approved` / `approval_denied` /
 `approval_modified` event so the CEO can see it on the next turn via
 `query_event_log`.
 
-The connected Stripe card / spend-gate enforcement that consumes an approval
-lands in Phase 2 alongside the money spine. For now, the approval flow is
-pure audit trail + event log — the CEO sees it, relays to the user.
+When the user taps "approve & raise cap" on a spend approval we also bump
+the business's weekly_spend_cap_cents AND push the new limit to Stripe's
+card-level spending_controls so the authorization flow stays consistent.
 """
 
 from __future__ import annotations
@@ -22,9 +22,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.auth import CurrentUser, require_user
+from helm.config import get_settings
 from helm.db.models import AgentEvent, AgentSession, Approval, Business
 from helm.db.session import get_session
-from helm.services import event_log
+from helm.services import event_log, stripe_client
 from helm.services.user_sync import sync_user_from_supabase
 
 # Headroom applied when the user approves a spend AND elects to raise the
@@ -238,10 +239,31 @@ async def _apply_cap_raise(db: AsyncSession, approval: Approval) -> dict[str, An
         }
 
     biz.weekly_spend_cap_cents = new_cap
+
+    # Push the new cap to Stripe so the card's own spending_limits match.
+    # Without this, the DB cap goes up but the real merchant authorization
+    # still declines at Stripe's edge (Stripe enforces the card-level limit
+    # independently of our authorization-decision webhook).
+    stripe_sync: dict[str, Any] = {"attempted": False}
+    settings = get_settings()
+    if settings.stripe_issuing_enabled and biz.stripe_card_id and biz.stripe_account_id:
+        stripe_sync["attempted"] = True
+        try:
+            await stripe_client.update_issuing_weekly_cap(
+                account_id=biz.stripe_account_id,
+                card_id=biz.stripe_card_id,
+                weekly_spend_cap_cents=new_cap,
+            )
+            stripe_sync["synced"] = True
+        except Exception as e:
+            stripe_sync["synced"] = False
+            stripe_sync["error"] = str(e)[:200]
+
     return {
         "old_cap_cents": old_cap,
         "new_cap_cents": new_cap,
         "changed": True,
         "wtd_cents": wtd,
         "buffer_cents": _RAISE_CAP_BUFFER_CENTS,
+        "stripe_sync": stripe_sync,
     }
