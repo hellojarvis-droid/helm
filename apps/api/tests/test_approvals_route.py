@@ -227,7 +227,7 @@ async def test_cap_raise_syncs_to_stripe_when_card_exists(session, monkeypatch) 
     async def _fake_update(**kwargs: object) -> None:
         calls.append(kwargs)
 
-    monkeypatch.setattr(stripe_module, "update_issuing_weekly_cap", _fake_update)
+    monkeypatch.setattr(stripe_module, "update_issuing_caps", _fake_update)
 
     # Flip the settings flag. get_settings is cached via lru_cache; clear it.
     monkeypatch.setenv("STRIPE_ISSUING_ENABLED", "true")
@@ -257,6 +257,9 @@ async def test_cap_raise_syncs_to_stripe_when_card_exists(session, monkeypatch) 
     assert calls[0]["account_id"] == "acct_test"
     assert calls[0]["card_id"] == "ic_test"
     assert calls[0]["weekly_spend_cap_cents"] == 24_000
+    # cap-raise flow now mirrors all three knobs to Stripe.
+    assert calls[0]["per_auth_cap_cents"] == 50_000  # default from the column
+    assert calls[0]["allowed_mcc_codes"] is None
 
     config.get_settings.cache_clear()
 
