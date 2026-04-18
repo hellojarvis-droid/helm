@@ -34,7 +34,7 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://helm:helm@localhost:5432/helm_test
       TEST_DATABASE_URL: postgresql+asyncpg://helm:helm@localhost:5432/helm_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -80,7 +80,7 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder_anon_key_for_ci_builds_only
       NEXT_PUBLIC_HELM_API_BASE: http://localhost:8000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
