@@ -1,6 +1,15 @@
 import * as Haptics from "expo-haptics";
 import { useState } from "react";
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { BillingCard } from "@/components/BillingCard";
 import { colors } from "@/lib/colors";
 import { useKillSwitch } from "@/lib/useKillSwitch";
 
@@ -52,7 +61,7 @@ export default function SafetyScreen() {
   }
 
   return (
-    <View style={[styles.container, active && styles.containerActive]}>
+    <ScrollView style={[styles.container, active && styles.containerActive]}>
       <View style={styles.inner}>
         <View style={styles.statusBlock}>
           <Text style={[styles.statusLabel, active && { color: colors.danger }]}>
@@ -92,6 +101,11 @@ export default function SafetyScreen() {
             next tool call after a toggle reflects the new state.
           </Note>
         </View>
+
+        <View style={styles.billingBlock}>
+          <Text style={styles.sectionHeader}>Plan</Text>
+          <BillingCard />
+        </View>
       </View>
 
       <ConfirmModal
@@ -102,7 +116,7 @@ export default function SafetyScreen() {
         }}
         onConfirm={onConfirmPause}
       />
-    </View>
+    </ScrollView>
   );
 }
 
@@ -185,6 +199,20 @@ const styles = StyleSheet.create({
   },
 
   notesBlock: { gap: 12, marginTop: 12 },
+  billingBlock: {
+    gap: 10,
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(107,107,107,0.2)",
+  },
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: colors.iron,
+  },
   note: {
     backgroundColor: colors.haze,
     padding: 14,

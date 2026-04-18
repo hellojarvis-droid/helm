@@ -367,6 +367,25 @@ export async function setKillSwitch(active: boolean): Promise<KillSwitchState> {
 }
 
 // ──────────────────────────────────────────────────────────
+// Billing — tier limits + usage
+// ──────────────────────────────────────────────────────────
+
+export interface BillingState {
+  tier: string;
+  display_name: string;
+  max_businesses: number;
+  monthly_tokens: number;
+  businesses_used: number;
+  month_to_date_cost_cents: number;
+}
+
+export async function getBilling(): Promise<BillingState> {
+  const res = await apiFetch("/billing/me");
+  if (!res.ok) throw new Error(`getBilling ${res.status}`);
+  return res.json();
+}
+
+// ──────────────────────────────────────────────────────────
 // Approvals
 // ──────────────────────────────────────────────────────────
 

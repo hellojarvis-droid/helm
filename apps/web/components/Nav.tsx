@@ -12,6 +12,7 @@ const items = [
   { href: "/businesses" as const, label: "Businesses" },
   { href: "/approvals" as const, label: "Approvals" },
   { href: "/safety" as const, label: "Safety" },
+  { href: "/billing" as const, label: "Billing" },
 ];
 
 export function Nav() {
