@@ -8,12 +8,12 @@ pause/resume in a later session.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.auth import CurrentUser, require_user
@@ -140,6 +140,76 @@ class EventResponse(BaseModel):
             cost_cents=row.cost_cents,
             created_at=row.created_at,
         )
+
+
+class SpendSummary(BaseModel):
+    weekly_cap_cents: int
+    week_to_date_cents: int
+    remaining_cents: int
+    llm_cost_cents: int
+    declined_count: int
+    window_days: int
+    since: datetime
+
+
+@router.get("/{business_id}/spend", response_model=SpendSummary)
+async def get_spend(
+    business_id: uuid.UUID,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_session),
+) -> SpendSummary:
+    """Spend dashboard data for the last 7 days.
+
+    - week_to_date_cents: what the business actually spent (Stripe authorizations
+      approved). This is the metric the weekly cap gates against.
+    - llm_cost_cents: inference cost of running the agents over the same window.
+      Not gated by the spend cap; reported separately so the user sees both.
+    - declined_count: spend_declined events in the window — a signal the agents
+      hit a policy or budget wall.
+    """
+    user_row = await sync_user_from_supabase(db, user)
+    biz = await get_business_for_user(db, user_row.id, business_id)
+    if biz is None:
+        raise HTTPException(status_code=404, detail="business not found")
+
+    since = datetime.now(UTC) - timedelta(days=7)
+
+    wtd_q = await db.execute(
+        select(func.coalesce(func.sum(AgentEvent.cost_cents), 0)).where(
+            AgentEvent.business_id == business_id,
+            AgentEvent.event_type == "spend_authorized",
+            AgentEvent.created_at >= since,
+        )
+    )
+    wtd = int(wtd_q.scalar() or 0)
+
+    llm_q = await db.execute(
+        select(func.coalesce(func.sum(AgentEvent.cost_cents), 0)).where(
+            AgentEvent.business_id == business_id,
+            AgentEvent.event_type == "message.agent",
+            AgentEvent.created_at >= since,
+        )
+    )
+    llm = int(llm_q.scalar() or 0)
+
+    declined_q = await db.execute(
+        select(func.count()).where(
+            AgentEvent.business_id == business_id,
+            AgentEvent.event_type == "spend_declined",
+            AgentEvent.created_at >= since,
+        )
+    )
+    declined = int(declined_q.scalar() or 0)
+
+    return SpendSummary(
+        weekly_cap_cents=biz.weekly_spend_cap_cents,
+        week_to_date_cents=wtd,
+        remaining_cents=max(biz.weekly_spend_cap_cents - wtd, 0),
+        llm_cost_cents=llm,
+        declined_count=declined,
+        window_days=7,
+        since=since,
+    )
 
 
 @router.get("/{business_id}/events", response_model=list[EventResponse])

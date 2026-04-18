@@ -198,6 +198,22 @@ export async function startStripeOnboarding(businessId: string): Promise<StripeO
   return res.json();
 }
 
+export interface SpendSummary {
+  weekly_cap_cents: number;
+  week_to_date_cents: number;
+  remaining_cents: number;
+  llm_cost_cents: number;
+  declined_count: number;
+  window_days: number;
+  since: string;
+}
+
+export async function getSpend(businessId: string): Promise<SpendSummary> {
+  const res = await apiFetch(`/businesses/${businessId}/spend`);
+  if (!res.ok) throw new Error(`getSpend ${res.status}`);
+  return res.json();
+}
+
 export interface AgentEvent {
   id: number;
   session_id: string;

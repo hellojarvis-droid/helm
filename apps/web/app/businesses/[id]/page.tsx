@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { Nav } from "@/components/Nav";
+import { SpendCard } from "@/components/SpendCard";
 import { Button } from "@/components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { type Business, getBusiness, startStripeOnboarding } from "@/lib/api";
@@ -117,6 +118,8 @@ export default function BusinessDetailPage({ params }: PageProps) {
             {error && <p className="text-sm text-danger mt-3">{error}</p>}
           </div>
         </Card>
+
+        <SpendCard businessId={id} />
 
         <Card>
           <CardHeader>

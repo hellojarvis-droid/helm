@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { SpendCard } from "@/components/SpendCard";
 import {
   connectToolkit,
   getBusiness,
@@ -203,6 +204,13 @@ export default function BusinessDetailScreen() {
           <Pressable style={styles.secondary} onPress={() => setPickerOpen(true)}>
             <Text style={styles.secondaryText}>+ Connect a toolkit</Text>
           </Pressable>
+        </Card>
+
+        <Card
+          title="Spend"
+          description="Week-to-date against the weekly cap. Stripe Issuing declines over this."
+        >
+          <SpendCard businessId={biz.id} />
         </Card>
 
         <Card
