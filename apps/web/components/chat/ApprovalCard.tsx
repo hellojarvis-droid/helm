@@ -8,7 +8,10 @@ interface ApprovalCardProps {
   summary: string;
   expires_at: string;
   details?: Record<string, unknown>;
-  onRespond?: (status: "approved" | "denied") => void;
+  onRespond?: (
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) => void;
 }
 
 export function ApprovalCard(props: ApprovalCardProps) {
@@ -95,13 +98,21 @@ function SpendApprovalCard({
 
       <p className="text-xs text-iron leading-relaxed mb-4">{summary}</p>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant="accent"
           onClick={() => onRespond?.("approved")}
           aria-label={`Approve ${approval_id}`}
         >
           Approve ${(amountCents / 100).toFixed(0)}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => onRespond?.("modified", { raise_weekly_cap: true })}
+          aria-label={`Approve and raise weekly cap for ${approval_id}`}
+          title="Approves this spend AND raises the business's weekly cap to fit it."
+        >
+          Approve & raise cap
         </Button>
         <Button
           variant="outline"

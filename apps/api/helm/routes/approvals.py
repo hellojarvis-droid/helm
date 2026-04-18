@@ -13,19 +13,24 @@ pure audit trail + event log — the CEO sees it, relays to the user.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.auth import CurrentUser, require_user
-from helm.db.models import AgentSession, Approval, Business
+from helm.db.models import AgentEvent, AgentSession, Approval, Business
 from helm.db.session import get_session
 from helm.services import event_log
 from helm.services.user_sync import sync_user_from_supabase
+
+# Headroom applied when the user approves a spend AND elects to raise the
+# weekly cap — the new cap covers week-to-date + the pending spend + this
+# buffer so the agent isn't immediately at the ceiling again.
+_RAISE_CAP_BUFFER_CENTS = 10_000  # $100
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 
@@ -140,6 +145,20 @@ async def respond(
     row.responded_at = datetime.now(UTC)
     if body.modifications:
         row.details = {**row.details, "user_modifications": body.modifications}
+
+    # If the user chose "approve & raise the weekly cap" on a spend approval,
+    # bump the business's cap atomically with the approval response. We
+    # compute the new cap server-side so the client stays simple and we
+    # apply the buffer policy in one place.
+    cap_raise_meta: dict[str, Any] | None = None
+    if (
+        new_status == "modified"
+        and body.modifications
+        and body.modifications.get("raise_weekly_cap") is True
+        and row.kind == "spend"
+    ):
+        cap_raise_meta = await _apply_cap_raise(db, row)
+
     await db.commit()
     await db.refresh(row)
 
@@ -154,18 +173,70 @@ async def respond(
     session_row = sess.scalar_one_or_none()
     if session_row is not None:
         event_type = f"approval_{new_status}"
+        payload: dict[str, Any] = {
+            "approval_id": str(row.id),
+            "kind": row.kind,
+            "summary": row.summary,
+            "modifications": body.modifications,
+        }
+        if cap_raise_meta is not None:
+            payload["cap_raise"] = cap_raise_meta
         await event_log.write(
             db,
             session_id=session_row.id,
             business_id=row.business_id,
             event_type=event_type,
             agent_name="user",
-            payload={
-                "approval_id": str(row.id),
-                "kind": row.kind,
-                "summary": row.summary,
-                "modifications": body.modifications,
-            },
+            payload=payload,
         )
 
     return ApprovalResponse.from_row(row)
+
+
+async def _apply_cap_raise(db: AsyncSession, approval: Approval) -> dict[str, Any] | None:
+    """Compute and apply a new weekly cap on the approval's business.
+
+    new_cap = max(current_cap, wtd_authorized + pending_amount + buffer)
+    The pending spend's amount comes from approval.details.amount_cents; if it's
+    missing we skip the raise (nothing to guarantee room for).
+    """
+    amount = approval.details.get("amount_cents")
+    if not isinstance(amount, int) or amount <= 0:
+        return None
+
+    biz_row = await db.execute(select(Business).where(Business.id == approval.business_id))
+    biz = biz_row.scalar_one_or_none()
+    if biz is None:
+        return None
+
+    # Mirror stripe_authorization: only spend_authorized inside the last 7 days
+    # counts toward week-to-date, so the new cap is sized against real usage.
+    since = datetime.now(UTC) - timedelta(days=7)
+    wtd_q = await db.execute(
+        select(func.coalesce(func.sum(AgentEvent.cost_cents), 0)).where(
+            AgentEvent.business_id == biz.id,
+            AgentEvent.event_type == "spend_authorized",
+            AgentEvent.created_at >= since,
+        )
+    )
+    wtd = int(wtd_q.scalar() or 0)
+
+    required = wtd + amount + _RAISE_CAP_BUFFER_CENTS
+    new_cap = max(biz.weekly_spend_cap_cents, required)
+    old_cap = biz.weekly_spend_cap_cents
+    if new_cap == old_cap:
+        return {
+            "old_cap_cents": old_cap,
+            "new_cap_cents": new_cap,
+            "changed": False,
+            "reason": "existing cap already covers wtd + amount + buffer",
+        }
+
+    biz.weekly_spend_cap_cents = new_cap
+    return {
+        "old_cap_cents": old_cap,
+        "new_cap_cents": new_cap,
+        "changed": True,
+        "wtd_cents": wtd,
+        "buffer_cents": _RAISE_CAP_BUFFER_CENTS,
+    }

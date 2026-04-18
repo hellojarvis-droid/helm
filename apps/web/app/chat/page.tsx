@@ -58,19 +58,27 @@ export default function ChatPage() {
     }
   }
 
-  async function respond(approvalId: string, status: "approved" | "denied") {
+  async function respond(
+    approvalId: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) {
     try {
       const res = await apiFetch(`/approvals/${approvalId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, modifications: modifications ?? null }),
       });
       if (!res.ok) throw new Error(await res.text());
       // Replace the approval card with a compact status line.
+      const label =
+        status === "modified" && modifications?.raise_weekly_cap
+          ? "approval:approved+cap_raised"
+          : `approval:${status}`;
       setParts((p) =>
         p.map((part) =>
           part.kind === "approval" && part.event.approval_id === approvalId
-            ? { kind: "tool", name: `approval:${status}`, ok: true }
+            ? { kind: "tool", name: label, ok: true }
             : part,
         ),
       );
@@ -131,7 +139,11 @@ function TurnPartView({
   onApproval,
 }: {
   part: TurnPart;
-  onApproval: (approvalId: string, status: "approved" | "denied") => void;
+  onApproval: (
+    approvalId: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) => void;
 }) {
   if (part.kind === "user") {
     return (
@@ -161,7 +173,7 @@ function TurnPartView({
       summary={ev.summary}
       expires_at={ev.expires_at}
       details={ev.details}
-      onRespond={(status) => onApproval(ev.approval_id, status)}
+      onRespond={(status, modifications) => onApproval(ev.approval_id, status, modifications)}
     />
   );
 }

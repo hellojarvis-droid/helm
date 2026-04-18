@@ -333,12 +333,13 @@ export async function listApprovals(status?: Approval["status"]): Promise<Approv
 
 export async function respondToApproval(
   approvalId: string,
-  status: "approved" | "denied",
+  status: "approved" | "denied" | "modified",
+  modifications?: Record<string, unknown>,
 ): Promise<Approval> {
   const res = await apiFetch(`/approvals/${approvalId}/respond`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, modifications: modifications ?? null }),
   });
   if (!res.ok) throw new Error(`respondToApproval ${res.status}: ${await res.text()}`);
   return res.json();

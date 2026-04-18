@@ -24,7 +24,7 @@ type ApprovalPart = {
   details?: Record<string, unknown>;
   business_id: string;
   expires_at: string;
-  resolvedAs?: "approved" | "denied";
+  resolvedAs?: "approved" | "denied" | "approved+cap_raised";
 };
 
 type TurnPart =
@@ -109,18 +109,26 @@ export default function ChatScreen() {
     }
   }
 
-  async function respond(approvalId: string, status: "approved" | "denied") {
+  async function respond(
+    approvalId: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) {
     Haptics.impactAsync(
-      status === "approved"
-        ? Haptics.ImpactFeedbackStyle.Medium
-        : Haptics.ImpactFeedbackStyle.Light,
+      status === "denied" ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium,
     );
     try {
-      await respondToApproval(approvalId, status);
+      await respondToApproval(approvalId, status, modifications);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const resolvedAs: ApprovalPart["resolvedAs"] =
+        status === "modified" && modifications?.raise_weekly_cap
+          ? "approved+cap_raised"
+          : status === "modified"
+            ? "approved"
+            : status;
       setParts((prev) =>
         prev.map((p) =>
-          p.kind === "approval" && p.approval_id === approvalId ? { ...p, resolvedAs: status } : p,
+          p.kind === "approval" && p.approval_id === approvalId ? { ...p, resolvedAs } : p,
         ),
       );
     } catch (e) {
@@ -185,7 +193,11 @@ function PartView({
   onRespond,
 }: {
   part: TurnPart;
-  onRespond: (id: string, status: "approved" | "denied") => void;
+  onRespond: (
+    id: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) => void;
 }) {
   if (part.kind === "user") {
     return (
@@ -225,7 +237,11 @@ function ApprovalCardInline({
   onRespond,
 }: {
   part: ApprovalPart;
-  onRespond: (id: string, status: "approved" | "denied") => void;
+  onRespond: (
+    id: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) => void;
 }) {
   const expires = new Date(part.expires_at).toLocaleString(undefined, {
     dateStyle: "short",
@@ -233,9 +249,11 @@ function ApprovalCardInline({
   });
 
   if (part.resolvedAs) {
-    return (
-      <Text style={[styles.toolLine, { color: colors.accent }]}>✓ approval {part.resolvedAs}</Text>
-    );
+    const label =
+      part.resolvedAs === "approved+cap_raised"
+        ? "approval approved + cap raised"
+        : `approval ${part.resolvedAs}`;
+    return <Text style={[styles.toolLine, { color: colors.accent }]}>✓ {label}</Text>;
   }
 
   const d = part.details ?? {};
@@ -265,12 +283,18 @@ function ApprovalCardInline({
           </Text>
         ) : null}
         <Text style={styles.spendSummary}>{part.summary}</Text>
-        <View style={styles.approvalActions}>
+        <View style={[styles.approvalActions, { flexWrap: "wrap" }]}>
           <Pressable
             style={styles.approveBtn}
             onPress={() => onRespond(part.approval_id, "approved")}
           >
             <Text style={styles.approveText}>Approve ${(amountCents / 100).toFixed(0)}</Text>
+          </Pressable>
+          <Pressable
+            style={styles.raiseCapBtn}
+            onPress={() => onRespond(part.approval_id, "modified", { raise_weekly_cap: true })}
+          >
+            <Text style={styles.raiseCapText}>Approve & raise cap</Text>
           </Pressable>
           <Pressable style={styles.denyBtn} onPress={() => onRespond(part.approval_id, "denied")}>
             <Text style={styles.denyText}>Deny</Text>
@@ -436,6 +460,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   approveText: { color: colors.paper, fontWeight: "500", fontSize: 14 },
+  raiseCapBtn: {
+    borderWidth: 1,
+    borderColor: colors.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  raiseCapText: { color: colors.accent, fontWeight: "500", fontSize: 14 },
   denyBtn: {
     borderWidth: 1,
     borderColor: "rgba(107,107,107,0.3)",

@@ -29,10 +29,14 @@ export default function ApprovalsPage() {
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [tab]);
 
-  async function respond(id: string, status: "approved" | "denied") {
+  async function respond(
+    id: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) {
     setError(null);
     try {
-      const updated = await respondToApproval(id, status);
+      const updated = await respondToApproval(id, status, modifications);
       setRows((prev) =>
         prev ? prev.map((r) => (r.id === id ? updated : r)).filter(matchesTab(tab)) : prev,
       );
@@ -98,7 +102,11 @@ function ApprovalRow({
   onRespond,
 }: {
   approval: Approval;
-  onRespond: (id: string, status: "approved" | "denied") => Promise<void>;
+  onRespond: (
+    id: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const expires = new Date(approval.expires_at).toLocaleString(undefined, {
@@ -163,7 +171,7 @@ function ApprovalRow({
       )}
 
       {pending && (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="accent"
             size={isSpend ? "md" : "sm"}
@@ -176,6 +184,21 @@ function ApprovalRow({
           >
             {isSpend ? `Approve $${(amountCents / 100).toFixed(0)}` : "Approve"}
           </Button>
+          {isSpend && (
+            <Button
+              variant="outline"
+              size="md"
+              disabled={busy}
+              title="Approves this spend AND raises the business's weekly cap to fit it."
+              onClick={async () => {
+                setBusy(true);
+                await onRespond(approval.id, "modified", { raise_weekly_cap: true });
+                setBusy(false);
+              }}
+            >
+              Approve & raise cap
+            </Button>
+          )}
           <Button
             variant="outline"
             size={isSpend ? "md" : "sm"}

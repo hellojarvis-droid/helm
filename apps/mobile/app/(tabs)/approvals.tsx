@@ -42,14 +42,16 @@ export default function ApprovalsScreen() {
     setRefreshing(false);
   }
 
-  async function respond(id: string, status: "approved" | "denied") {
+  async function respond(
+    id: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) {
     Haptics.impactAsync(
-      status === "approved"
-        ? Haptics.ImpactFeedbackStyle.Medium
-        : Haptics.ImpactFeedbackStyle.Light,
+      status === "denied" ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium,
     );
     try {
-      await respondToApproval(id, status);
+      await respondToApproval(id, status, modifications);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await load();
     } catch (e) {
@@ -98,7 +100,11 @@ function Card({
   onRespond,
 }: {
   approval: Approval;
-  onRespond: (id: string, status: "approved" | "denied") => void;
+  onRespond: (
+    id: string,
+    status: "approved" | "denied" | "modified",
+    modifications?: Record<string, unknown>,
+  ) => void;
 }) {
   const pending = approval.status === "pending";
   const d = approval.details ?? {};
@@ -134,12 +140,20 @@ function Card({
         <Text style={styles.summary}>{approval.summary}</Text>
       )}
       {pending ? (
-        <View style={styles.actions}>
+        <View style={[styles.actions, { flexWrap: "wrap" }]}>
           <Pressable style={styles.approve} onPress={() => onRespond(approval.id, "approved")}>
             <Text style={styles.approveText}>
               {isSpend ? `Approve $${(amountCents / 100).toFixed(0)}` : "Approve"}
             </Text>
           </Pressable>
+          {isSpend ? (
+            <Pressable
+              style={styles.raiseCap}
+              onPress={() => onRespond(approval.id, "modified", { raise_weekly_cap: true })}
+            >
+              <Text style={styles.raiseCapText}>Approve & raise cap</Text>
+            </Pressable>
+          ) : null}
           <Pressable style={styles.deny} onPress={() => onRespond(approval.id, "denied")}>
             <Text style={styles.denyText}>Deny</Text>
           </Pressable>
@@ -221,6 +235,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   approveText: { color: colors.paper, fontWeight: "500" },
+  raiseCap: {
+    backgroundColor: "transparent",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  raiseCapText: { color: colors.accent, fontWeight: "500" },
   deny: {
     backgroundColor: "transparent",
     paddingHorizontal: 14,
