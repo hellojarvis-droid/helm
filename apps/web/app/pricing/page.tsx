@@ -98,7 +98,7 @@ export default function PricingPage() {
         {TIERS.map((t) => (
           <div
             key={t.name}
-            className={`rounded-xl p-6 ${
+            className={`rounded-xl p-6 flex flex-col ${
               t.highlighted
                 ? "bg-ink text-paper border-2 border-accent"
                 : "bg-haze/40 dark:bg-ink/20 border border-iron/20"
@@ -112,7 +112,7 @@ export default function PricingPage() {
               <span className="text-sm opacity-60">{t.cadence}</span>
             </div>
             <p className="text-sm opacity-80 mb-4">{t.summary}</p>
-            <ul className="text-sm space-y-2">
+            <ul className="text-sm space-y-2 mb-6 flex-1">
               {t.includes.map((line) => (
                 <li key={line} className="flex gap-2">
                   <span className="text-accent">✓</span>
@@ -120,6 +120,28 @@ export default function PricingPage() {
                 </li>
               ))}
             </ul>
+            {t.name === "Portfolio" ? (
+              <a
+                href="mailto:hello@helm.app?subject=Portfolio%20tier%20inquiry"
+                className="inline-flex items-center justify-center h-11 px-5 rounded-md bg-accent text-paper text-sm font-medium hover:bg-accent/90"
+              >
+                Talk to us
+              </a>
+            ) : (
+              <Link
+                href={{
+                  pathname: "/sign-in",
+                  query: { upgrade: t.name.toLowerCase() },
+                }}
+                className={`inline-flex items-center justify-center h-11 px-5 rounded-md text-sm font-medium ${
+                  t.highlighted
+                    ? "bg-accent text-paper hover:bg-accent/90"
+                    : "bg-ink text-paper hover:bg-ink/90 dark:bg-paper dark:text-ink dark:hover:bg-paper/90"
+                }`}
+              >
+                Get {t.name}
+              </Link>
+            )}
           </div>
         ))}
       </section>

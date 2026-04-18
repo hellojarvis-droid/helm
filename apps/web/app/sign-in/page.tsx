@@ -19,7 +19,10 @@ export default function SignInPage() {
 function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") ?? "/today";
+  // `upgrade=operator|portfolio` from /pricing — route to /billing post-sign-in
+  // so the Checkout buttons are one tap away. Falls back to ?next=… or /today.
+  const upgrade = params.get("upgrade");
+  const next = params.get("next") ?? (upgrade ? "/billing" : "/today");
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
