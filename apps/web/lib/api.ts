@@ -141,6 +141,30 @@ export async function startStripeOnboarding(businessId: string): Promise<StripeO
   return res.json();
 }
 
+export interface AgentEvent {
+  id: number;
+  session_id: string;
+  business_id: string | null;
+  event_type: string;
+  agent_name: string;
+  payload: Record<string, unknown>;
+  cost_cents: number;
+  created_at: string;
+}
+
+export async function listEvents(
+  businessId: string,
+  opts: { limit?: number; beforeId?: number } = {},
+): Promise<AgentEvent[]> {
+  const params = new URLSearchParams();
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.beforeId) params.set("before_id", String(opts.beforeId));
+  const qs = params.toString();
+  const res = await apiFetch(`/businesses/${businessId}/events${qs ? `?${qs}` : ""}`);
+  if (!res.ok) throw new Error(`listEvents: ${res.status}`);
+  return res.json();
+}
+
 // ──────────────────────────────────────────────────────────
 // Approvals
 // ──────────────────────────────────────────────────────────

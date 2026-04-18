@@ -13,6 +13,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { ActivityFeed } from "@/components/ActivityFeed";
 import {
   connectToolkit,
   getBusiness,
@@ -202,6 +203,13 @@ export default function BusinessDetailScreen() {
           <Pressable style={styles.secondary} onPress={() => setPickerOpen(true)}>
             <Text style={styles.secondaryText}>+ Connect a toolkit</Text>
           </Pressable>
+        </Card>
+
+        <Card
+          title="Activity"
+          description="Every tool call, approval, and spend. Event-sourced — this is the record."
+        >
+          <ActivityFeed businessId={biz.id} />
         </Card>
 
         <Card

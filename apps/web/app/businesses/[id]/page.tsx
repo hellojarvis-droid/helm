@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { ActivityFeed } from "@/components/ActivityFeed";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -134,6 +135,16 @@ export default function BusinessDetailPage({ params }: PageProps) {
               No brand kit yet. Go to chat and ask Creative Director to draft one.
             </p>
           )}
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Activity</CardTitle>
+            <CardDescription>
+              Every tool call, approval, and spend. Event-sourced — this is the record.
+            </CardDescription>
+          </CardHeader>
+          <ActivityFeed businessId={id} />
         </Card>
 
         <Link
