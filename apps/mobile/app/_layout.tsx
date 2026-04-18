@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { colors } from "@/lib/colors";
 import { registerForPushNotifications } from "@/lib/push";
@@ -48,19 +49,21 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <PostHogProvider>
-      <StatusBar style="auto" />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.paper },
-          headerTintColor: colors.ink,
-          contentStyle: { backgroundColor: colors.paper },
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-        <Stack.Screen name="business/[id]" options={{ headerBackTitle: "Back" }} />
-      </Stack>
-    </PostHogProvider>
+    <ErrorBoundary>
+      <PostHogProvider>
+        <StatusBar style="auto" />
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: colors.paper },
+            headerTintColor: colors.ink,
+            contentStyle: { backgroundColor: colors.paper },
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+          <Stack.Screen name="business/[id]" options={{ headerBackTitle: "Back" }} />
+        </Stack>
+      </PostHogProvider>
+    </ErrorBoundary>
   );
 }
