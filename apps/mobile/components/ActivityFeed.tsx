@@ -76,6 +76,7 @@ const BADGE: Record<string, Badge> = {
     fg: colors.ink,
     border: "rgba(107,107,107,0.2)",
   },
+  computer_use_requested: { label: "computer use", bg: colors.ink, fg: colors.paper },
   kill_switch_activated: { label: "kill switch", bg: colors.danger, fg: colors.paper },
   error: {
     label: "error",
@@ -225,6 +226,8 @@ function summarize(ev: AgentEvent): string {
       return `Revenue: $${((Number(p.amount_cents) || 0) / 100).toFixed(2)}`;
     case "specialist_completed":
       return `${stringOr(p.name, "specialist")} → ${stringOr(p.status, "ok")}`;
+    case "computer_use_requested":
+      return `Computer use queued: ${stringOr(p.task, "—")} (${stringOr(p.app_hint, "no app hint")})`;
     case "kill_switch_activated":
       return "Kill switch activated — all agents halted.";
     case "error":

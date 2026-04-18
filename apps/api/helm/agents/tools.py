@@ -255,6 +255,45 @@ CEO_TOOLS: list[dict[str, Any]] = [
             "required": ["kind", "summary", "business_id"],
         },
     },
+    {
+        "name": "escalate_to_computer_use",
+        "description": (
+            "Queue a task that needs the user's screen — for sites without a "
+            "usable API, or where Composio's coverage is incomplete. The task "
+            "runs in the desktop app's sandboxed computer-use session when the "
+            "user has it open; otherwise it queues for the next time they do. "
+            "Use ONLY when no Composio toolkit + no specialist can complete "
+            "the work via API. Examples: TikTok Ads small-budget self-serve "
+            "flow, supplier portals without Shopify integration.\n\n"
+            "Returns {escalation_id, status: 'queued'}. You should still tell "
+            "the user the agent will hand the task to their desktop — they need "
+            "to know they may be asked to watch the screen."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "business_id": {
+                    "type": "string",
+                    "description": "UUID of the business this task is scoped to.",
+                },
+                "task": {
+                    "type": "string",
+                    "description": (
+                        "Self-contained instruction for the computer-use sandbox. "
+                        "Include success criteria so the run knows when it's done."
+                    ),
+                },
+                "app_hint": {
+                    "type": "string",
+                    "description": (
+                        "Which app / site the sandbox should open first. "
+                        "Examples: 'tiktok ads manager', 'printful catalog'."
+                    ),
+                },
+            },
+            "required": ["business_id", "task", "app_hint"],
+        },
+    },
 ]
 
 
@@ -491,12 +530,61 @@ async def _request_spend(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
     }
 
 
+async def _escalate_to_computer_use(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Queue a computer-use task for the desktop app to pick up.
+
+    Today this is interface-only: writes a `computer_use_requested` event,
+    returns queued. The desktop app (apps/desktop) wires the actual
+    sandbox + screen-stream when the signed builds + Tauri auto-updater
+    land per BUILD_PLAN Phase 6.
+    """
+    biz_arg = args.get("business_id")
+    if not isinstance(biz_arg, str) or not biz_arg:
+        return {"status": "error", "summary": "business_id is required"}
+    try:
+        biz_id = uuid.UUID(biz_arg)
+    except ValueError:
+        return {"status": "error", "summary": f"business_id '{biz_arg}' is not a valid UUID"}
+
+    task = args.get("task")
+    app_hint = args.get("app_hint")
+    if not isinstance(task, str) or not task.strip():
+        return {"status": "error", "summary": "task is required"}
+    if not isinstance(app_hint, str) or not app_hint.strip():
+        return {"status": "error", "summary": "app_hint is required"}
+
+    # Defense-in-depth: confirm the business belongs to the caller.
+    biz_row = await ctx.db.execute(
+        select(Business).where(Business.id == biz_id, Business.user_id == ctx.user_id)
+    )
+    if biz_row.scalar_one_or_none() is None:
+        return {"status": "error", "summary": "business not found for this user"}
+
+    logged = await event_log.write(
+        ctx.db,
+        session_id=ctx.session_id,
+        business_id=biz_id,
+        event_type="computer_use_requested",
+        agent_name="ceo_agent",
+        payload={"task": task.strip(), "app_hint": app_hint.strip()},
+    )
+    return {
+        "status": "queued",
+        "escalation_id": logged.id,
+        "note": (
+            "Computer-use task queued. The desktop app picks this up when the "
+            "user opens it. Tell the user to watch the screen when prompted."
+        ),
+    }
+
+
 CEO_TOOL_IMPLS: dict[str, ToolFn] = {
     "get_current_time": _get_current_time,
     "query_event_log": _query_event_log,
     "delegate_to_specialist": _delegate_to_specialist,
     "request_user_approval": _request_user_approval,
     "create_business": _create_business,
+    "escalate_to_computer_use": _escalate_to_computer_use,
     "request_spend": _request_spend,
 }
 

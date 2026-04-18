@@ -45,6 +45,10 @@ const EVENT_BADGE: Record<string, { label: string; className: string }> = {
     label: "specialist",
     className: "bg-haze text-ink border border-iron/20",
   },
+  computer_use_requested: {
+    label: "computer use",
+    className: "bg-ink text-paper",
+  },
   kill_switch_activated: {
     label: "kill switch",
     className: "bg-danger text-paper",
@@ -186,6 +190,8 @@ function summarize(ev: AgentEvent): string {
       return `Revenue: $${((Number(p.amount_cents) || 0) / 100).toFixed(2)}`;
     case "specialist_completed":
       return `${stringOr(p.name, "specialist")} → ${stringOr(p.status, "ok")}`;
+    case "computer_use_requested":
+      return `Computer use queued: ${stringOr(p.task, "—")} (${stringOr(p.app_hint, "no app hint")})`;
     case "kill_switch_activated":
       return "Kill switch activated — all agents halted.";
     case "error":
