@@ -386,6 +386,34 @@ export async function getBilling(): Promise<BillingState> {
 }
 
 // ──────────────────────────────────────────────────────────
+// Voice transcription — Whisper via backend
+// ──────────────────────────────────────────────────────────
+
+export async function transcribeAudio(uri: string): Promise<string> {
+  const env = mobileEnv();
+  const token = (await supabase().auth.getSession()).data.session?.access_token;
+  if (!token) throw new Error("not signed in");
+
+  const form = new FormData();
+  // React Native FormData accepts { uri, name, type } for file uploads.
+  form.append("audio", {
+    uri,
+    name: "voice.m4a",
+    type: "audio/m4a",
+  } as unknown as Blob);
+
+  const res = await fetch(`${env.helmApiBase}/chat/transcribe`, {
+    method: "POST",
+    body: form,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 501) throw new Error("voice transcription is not configured on the server");
+  if (!res.ok) throw new Error(`transcribe ${res.status}: ${await res.text()}`);
+  const body = (await res.json()) as { text: string };
+  return body.text;
+}
+
+// ──────────────────────────────────────────────────────────
 // Approvals
 // ──────────────────────────────────────────────────────────
 

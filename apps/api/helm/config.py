@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     composio_api_key: str = Field("", alias="COMPOSIO_API_KEY")
     composio_mcp_url: str = Field("https://mcp.composio.dev", alias="COMPOSIO_MCP_URL")
     composio_webhook_secret: str = Field("", alias="COMPOSIO_WEBHOOK_SECRET")
+    # Whisper transcription for the mobile voice-input button. Optional —
+    # missing key causes /chat/transcribe to 501 so the client hides the mic.
+    openai_api_key: str = Field("", alias="OPENAI_API_KEY")
 
     # Phase 2+
     stripe_secret_key: str = Field("", alias="STRIPE_SECRET_KEY")

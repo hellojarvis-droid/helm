@@ -22,6 +22,7 @@ dependencies = [
   "anthropic>=0.40.0",
   "composio>=0.8.0",
   "stripe>=11.4.0",
+  "openai>=2.32.0",
 ]
 
 [dependency-groups]

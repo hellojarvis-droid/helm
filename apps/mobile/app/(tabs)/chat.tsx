@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { MicButton } from "@/components/MicButton";
 import { PausedBanner } from "@/components/PausedBanner";
 import { respondToApproval, streamChatTurn, type ChatEvent } from "@/lib/api";
 import { colors } from "@/lib/colors";
@@ -40,6 +41,7 @@ export default function ChatScreen() {
   const [pending, setPending] = useState("");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [micAvailable, setMicAvailable] = useState(true);
   const listRef = useRef<FlatList<TurnPart>>(null);
 
   useEffect(() => {
@@ -177,6 +179,18 @@ export default function ChatScreen() {
           returnKeyType="send"
           multiline
         />
+        {micAvailable ? (
+          <MicButton
+            disabled={busy}
+            onTranscribed={(text) => setInput((prev) => (prev ? `${prev} ${text}` : text))}
+            onError={(msg) => {
+              // 501 from backend = transcription not configured; hide
+              // the button from here on. Other errors surface transiently.
+              if (msg.includes("not configured")) setMicAvailable(false);
+              setParts((p) => [...p, { kind: "error", text: msg }]);
+            }}
+          />
+        ) : null}
         <Pressable
           style={[styles.send, (!input.trim() || busy) && styles.sendDisabled]}
           onPress={send}
