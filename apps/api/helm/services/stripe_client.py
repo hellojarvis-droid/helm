@@ -205,67 +205,40 @@ async def create_issuing_card(
     return await _in_thread(_create)
 
 
-async def update_issuing_weekly_cap(
-    account_id: str,
-    card_id: str,
-    weekly_spend_cap_cents: int,
-) -> None:
-    """Push a new weekly spending cap onto an Issuing card.
-
-    Our DB cap + stripe_authorization.decide_authorization decides synchronous
-    approvals. But Stripe also enforces spending_limits on the card itself at
-    its edge — if the DB cap is raised without pushing here, the real merchant
-    transaction will still decline. Called from the approval "raise cap" flow
-    and any manual cap change.
-    """
-    await _update_spending_limits(
-        account_id=account_id,
-        card_id=card_id,
-        weekly_cents=weekly_spend_cap_cents,
-        per_auth_cents=None,
-    )
-
-
 async def update_issuing_caps(
     account_id: str,
     card_id: str,
     weekly_spend_cap_cents: int,
     per_auth_cap_cents: int,
+    allowed_mcc_codes: list[str] | None = None,
 ) -> None:
-    """Push both the weekly and per-authorization caps onto the Issuing card.
+    """Push the weekly cap, per-authorization cap, and (optional) MCC allowlist
+    onto the Issuing card.
 
-    Stripe takes a single spending_limits list — we rebuild it with both
-    intervals every time so the card's view stays a mirror of the business row.
+    Stripe takes a single spending_controls object — we rebuild it every time
+    so the card's view stays a mirror of the business row.
+    `allowed_mcc_codes` uses Stripe's category names, not MCC codes; the caller
+    is responsible for already having mapped to Stripe's vocabulary if needed.
+    Passing None clears the allowlist (Stripe falls back to "all categories").
     """
-    await _update_spending_limits(
-        account_id=account_id,
-        card_id=card_id,
-        weekly_cents=weekly_spend_cap_cents,
-        per_auth_cents=per_auth_cap_cents,
-    )
-
-
-async def _update_spending_limits(
-    *,
-    account_id: str,
-    card_id: str,
-    weekly_cents: int,
-    per_auth_cents: int | None,
-) -> None:
     settings = get_settings()
     if not settings.stripe_issuing_enabled:
         raise RuntimeError("Issuing not yet enabled")
     s = _configured_stripe()
 
-    limits: list[dict[str, Any]] = [{"amount": weekly_cents, "interval": "weekly"}]
-    if per_auth_cents is not None:
-        limits.append({"amount": per_auth_cents, "interval": "per_authorization"})
+    limits: list[dict[str, Any]] = [
+        {"amount": weekly_spend_cap_cents, "interval": "weekly"},
+        {"amount": per_auth_cap_cents, "interval": "per_authorization"},
+    ]
+    controls: dict[str, Any] = {"spending_limits": limits}
+    if allowed_mcc_codes is not None:
+        controls["allowed_categories"] = allowed_mcc_codes
 
     def _update() -> None:
         s.issuing.Card.modify(
             card_id,
             stripe_account=account_id,
-            spending_controls={"spending_limits": limits},
+            spending_controls=controls,
         )
 
     await _in_thread(_update)

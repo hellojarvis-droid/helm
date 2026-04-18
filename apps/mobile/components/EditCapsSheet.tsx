@@ -25,6 +25,8 @@ export function EditCapsSheet({
 }) {
   const [weekly, setWeekly] = useState((business.weekly_spend_cap_cents / 100).toFixed(0));
   const [perAuth, setPerAuth] = useState((business.per_auth_cap_cents / 100).toFixed(0));
+  const [mcc, setMcc] = useState(business.allowed_mcc_codes?.join(", ") ?? "");
+  const [useDefaultMcc, setUseDefaultMcc] = useState(business.allowed_mcc_codes === null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,14 +41,28 @@ export function EditCapsSheet({
       setError("Per-auth cap must be a non-negative number.");
       return;
     }
+    const body: Parameters<typeof updateBusiness>[1] = {
+      weekly_spend_cap_cents: weeklyCents,
+      per_auth_cap_cents: perAuthCents,
+    };
+    if (useDefaultMcc) {
+      body.reset_mcc_codes_to_default = true;
+    } else {
+      const codes = mcc
+        .split(/[\s,]+/)
+        .map((c) => c.trim())
+        .filter(Boolean);
+      if (codes.some((c) => !/^\d{3,4}$/.test(c))) {
+        setError("MCC codes must be 3-4 digit numbers.");
+        return;
+      }
+      body.allowed_mcc_codes = codes;
+    }
     setBusy(true);
     setError(null);
     Haptics.selectionAsync();
     try {
-      const updated = await updateBusiness(business.id, {
-        weekly_spend_cap_cents: weeklyCents,
-        per_auth_cap_cents: perAuthCents,
-      });
+      const updated = await updateBusiness(business.id, body);
       const syncOk = !updated.stripe_sync?.attempted || updated.stripe_sync?.synced === true;
       Haptics.notificationAsync(
         syncOk
@@ -93,6 +109,26 @@ export function EditCapsSheet({
               style={styles.input}
             />
           </View>
+
+          <View style={styles.mccHeaderRow}>
+            <Text style={styles.label}>Allowed MCC codes</Text>
+            <Pressable onPress={() => setUseDefaultMcc((v) => !v)}>
+              <Text style={[styles.toggle, useDefaultMcc && styles.toggleOn]}>
+                {useDefaultMcc ? "✓ Default" : "Custom"}
+              </Text>
+            </Pressable>
+          </View>
+          <TextInput
+            value={mcc}
+            onChangeText={setMcc}
+            editable={!useDefaultMcc}
+            placeholder="5734, 7372, 7311"
+            placeholderTextColor={colors.iron}
+            style={[styles.mccInput, useDefaultMcc && { opacity: 0.5 }]}
+          />
+          <Text style={styles.mccHint}>
+            Comma-separated 4-digit codes. Default covers SaaS, ads, POD suppliers.
+          </Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -157,6 +193,40 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontFamily: "Menlo",
     padding: 0,
+  },
+  mccHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginTop: 8,
+  },
+  toggle: {
+    fontSize: 11,
+    color: colors.iron,
+    borderWidth: 1,
+    borderColor: "rgba(107,107,107,0.3)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  toggleOn: {
+    color: colors.accent,
+    borderColor: colors.accent,
+  },
+  mccInput: {
+    backgroundColor: colors.haze,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.ink,
+    fontFamily: "Menlo",
+  },
+  mccHint: {
+    fontSize: 11,
+    color: colors.iron,
+    lineHeight: 15,
+    marginTop: 4,
   },
   error: { color: colors.danger, fontSize: 13, marginTop: 4 },
   actions: { flexDirection: "row", gap: 8, marginTop: 16 },

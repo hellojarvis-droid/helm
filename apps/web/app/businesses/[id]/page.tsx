@@ -104,6 +104,16 @@ export default function BusinessDetailPage({ params }: PageProps) {
               <dd className="tabular">${(biz.per_auth_cap_cents / 100).toFixed(0)}</dd>
             </div>
             <div className="flex justify-between">
+              <dt className="text-iron">MCC allowlist</dt>
+              <dd className="tabular text-xs">
+                {biz.allowed_mcc_codes === null
+                  ? "default"
+                  : biz.allowed_mcc_codes.length === 0
+                    ? "none (locked)"
+                    : `custom (${biz.allowed_mcc_codes.length})`}
+              </dd>
+            </div>
+            <div className="flex justify-between">
               <dt className="text-iron">Stripe account</dt>
               <dd className="tabular">{biz.stripe_account_id ?? "not connected"}</dd>
             </div>

@@ -13,6 +13,9 @@ interface Props {
 export function EditCapsModal({ business, onClose, onSaved }: Props) {
   const [weekly, setWeekly] = useState((business.weekly_spend_cap_cents / 100).toFixed(0));
   const [perAuth, setPerAuth] = useState((business.per_auth_cap_cents / 100).toFixed(0));
+  const [mcc, setMcc] = useState(business.allowed_mcc_codes?.join(", ") ?? "");
+  const initialCustomMcc = business.allowed_mcc_codes !== null;
+  const [useDefault, setUseDefault] = useState(!initialCustomMcc);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,13 +30,27 @@ export function EditCapsModal({ business, onClose, onSaved }: Props) {
       setError("Per-auth cap must be a non-negative number.");
       return;
     }
+    const body: Parameters<typeof updateBusiness>[1] = {
+      weekly_spend_cap_cents: weeklyCents,
+      per_auth_cap_cents: perAuthCents,
+    };
+    if (useDefault) {
+      body.reset_mcc_codes_to_default = true;
+    } else {
+      const codes = mcc
+        .split(/[\s,]+/)
+        .map((c) => c.trim())
+        .filter(Boolean);
+      if (codes.some((c) => !/^\d{3,4}$/.test(c))) {
+        setError("MCC codes must be 3-4 digit numbers.");
+        return;
+      }
+      body.allowed_mcc_codes = codes;
+    }
     setBusy(true);
     setError(null);
     try {
-      const updated = await updateBusiness(business.id, {
-        weekly_spend_cap_cents: weeklyCents,
-        per_auth_cap_cents: perAuthCents,
-      });
+      const updated = await updateBusiness(business.id, body);
       onSaved(updated);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -85,6 +102,35 @@ export function EditCapsModal({ business, onClose, onSaved }: Props) {
               />
             </div>
           </label>
+
+          <div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs uppercase tracking-wider text-iron font-semibold">
+                Allowed MCC codes
+              </span>
+              <label className="text-xs text-iron flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={useDefault}
+                  onChange={(e) => setUseDefault(e.target.checked)}
+                />
+                Use default allowlist
+              </label>
+            </div>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={mcc}
+              onChange={(e) => setMcc(e.target.value)}
+              disabled={useDefault}
+              placeholder="5734, 7372, 7311"
+              className="w-full mt-1 bg-haze dark:bg-haze/10 border border-iron/20 rounded-md px-3 py-2 text-sm font-mono disabled:opacity-50"
+            />
+            <p className="text-xs text-iron mt-1">
+              Comma-separated 4-digit MCC codes. Leave blank + check &ldquo;Use default&rdquo; to
+              fall back to the platform allowlist (SaaS, ads, POD suppliers).
+            </p>
+          </div>
 
           {error ? <p className="text-sm text-danger">{error}</p> : null}
 

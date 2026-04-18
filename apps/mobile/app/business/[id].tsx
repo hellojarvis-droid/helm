@@ -172,6 +172,16 @@ export default function BusinessDetailScreen() {
         >
           <KV k="Weekly cap" v={`$${(biz.weekly_spend_cap_cents / 100).toFixed(0)}`} />
           <KV k="Per-auth cap" v={`$${(biz.per_auth_cap_cents / 100).toFixed(0)}`} />
+          <KV
+            k="MCC allowlist"
+            v={
+              biz.allowed_mcc_codes === null
+                ? "default"
+                : biz.allowed_mcc_codes.length === 0
+                  ? "none (locked)"
+                  : `custom (${biz.allowed_mcc_codes.length})`
+            }
+          />
           <KV k="Stripe account" v={biz.stripe_account_id ?? "not connected"} />
           <KV k="Issuing card" v={biz.stripe_card_id ?? "not provisioned"} />
           {biz.stripe_sync?.attempted && biz.stripe_sync.synced === false ? (

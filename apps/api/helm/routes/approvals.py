@@ -249,10 +249,13 @@ async def _apply_cap_raise(db: AsyncSession, approval: Approval) -> dict[str, An
     if settings.stripe_issuing_enabled and biz.stripe_card_id and biz.stripe_account_id:
         stripe_sync["attempted"] = True
         try:
-            await stripe_client.update_issuing_weekly_cap(
+            # Mirror both caps + allowlist to Stripe so no knob drifts.
+            await stripe_client.update_issuing_caps(
                 account_id=biz.stripe_account_id,
                 card_id=biz.stripe_card_id,
                 weekly_spend_cap_cents=new_cap,
+                per_auth_cap_cents=biz.per_auth_cap_cents,
+                allowed_mcc_codes=biz.allowed_mcc_codes,
             )
             stripe_sync["synced"] = True
         except Exception as e:

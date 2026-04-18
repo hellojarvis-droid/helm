@@ -95,6 +95,7 @@ export interface Business {
   status: string;
   weekly_spend_cap_cents: number;
   per_auth_cap_cents: number;
+  allowed_mcc_codes: string[] | null;
   stripe_onboarding_complete?: boolean;
   created_at: string;
 }
@@ -138,7 +139,12 @@ export async function getBusiness(id: string): Promise<BusinessDetail> {
 
 export async function updateBusiness(
   id: string,
-  body: { weekly_spend_cap_cents?: number; per_auth_cap_cents?: number },
+  body: {
+    weekly_spend_cap_cents?: number;
+    per_auth_cap_cents?: number;
+    allowed_mcc_codes?: string[] | null;
+    reset_mcc_codes_to_default?: boolean;
+  },
 ): Promise<BusinessDetail> {
   const res = await apiFetch(`/businesses/${id}`, {
     method: "PATCH",

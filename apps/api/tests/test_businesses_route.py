@@ -122,6 +122,73 @@ async def test_patch_business_updates_caps_and_syncs_stripe(session, monkeypatch
 
 @requires_db
 @pytest.mark.asyncio
+async def test_patch_business_mcc_allowlist_override(session, monkeypatch) -> None:
+    """Business-level MCC override lands on the row AND pushes to Stripe's
+    allowed_categories. reset_mcc_codes_to_default clears it."""
+    from helm import config
+    from helm.db.models import Business, User
+    from helm.services import stripe_client as stripe_module
+
+    user = User(supabase_id="sub-mcc", email="mcc@example.com", tier="founder")
+    session.add(user)
+    await session.flush()
+    biz = Business(
+        user_id=user.id,
+        name="SaaS Co",
+        vertical="saas",
+        status="active",
+        stripe_account_id="acct_mcc",
+        stripe_card_id="ic_mcc",
+    )
+    session.add(biz)
+    await session.commit()
+    biz_id = biz.id
+
+    calls: list[dict[str, object]] = []
+
+    async def _fake_update(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(stripe_module, "update_issuing_caps", _fake_update)
+    monkeypatch.setenv("STRIPE_ISSUING_ENABLED", "true")
+    config.get_settings.cache_clear()
+
+    fake = CurrentUser(supabase_id="sub-mcc", email="mcc@example.com", raw_claims={})
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: fake
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Set a custom allowlist — SaaS business that only needs compute/data MCCs.
+        r = await client.patch(
+            f"/businesses/{biz_id}",
+            json={"allowed_mcc_codes": ["5734", " 7372 ", "5734"]},  # dup + whitespace
+            headers={"Authorization": "Bearer stub"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # Normalized: stripped + deduped, order preserved.
+        assert body["allowed_mcc_codes"] == ["5734", "7372"]
+        assert body["stripe_sync"]["synced"] is True
+
+        # Reset back to default.
+        r = await client.patch(
+            f"/businesses/{biz_id}",
+            json={"reset_mcc_codes_to_default": True},
+            headers={"Authorization": "Bearer stub"},
+        )
+        assert r.status_code == 200
+        assert r.json()["allowed_mcc_codes"] is None
+
+    assert len(calls) == 2
+    assert calls[0]["allowed_mcc_codes"] == ["5734", "7372"]
+    assert calls[1]["allowed_mcc_codes"] is None  # default allowlist on Stripe side
+
+    config.get_settings.cache_clear()
+
+
+@requires_db
+@pytest.mark.asyncio
 async def test_business_isolation_between_users(session) -> None:
     user_a = User(supabase_id="sub-biz-a", email="a@example.com", tier="founder")
     user_b = User(supabase_id="sub-biz-b", email="b@example.com", tier="founder")

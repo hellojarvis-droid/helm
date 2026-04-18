@@ -103,6 +103,7 @@ class Business(Base):
     per_auth_cap_cents: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("50000")
     )
+    allowed_mcc_codes: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

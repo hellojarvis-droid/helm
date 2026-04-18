@@ -116,8 +116,11 @@ async def decide_authorization(
             merchant_name=merchant_name,
         )
 
-    # 4. MCC allowlist.
-    if merchant_category and merchant_category not in mcc_allowlist:
+    # 4. MCC allowlist. Business-level override wins when set; else default.
+    effective_allowlist: frozenset[str] = (
+        frozenset(biz.allowed_mcc_codes) if biz.allowed_mcc_codes else mcc_allowlist
+    )
+    if merchant_category and merchant_category not in effective_allowlist:
         return await _log_and_return(
             db,
             approved=False,

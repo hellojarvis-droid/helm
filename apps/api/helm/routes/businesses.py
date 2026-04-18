@@ -54,6 +54,7 @@ class BusinessResponse(BaseModel):
     shopify_shop_domain: str | None
     weekly_spend_cap_cents: int
     per_auth_cap_cents: int
+    allowed_mcc_codes: list[str] | None
     brand_kit: dict[str, Any]
     created_at: datetime
     updated_at: datetime
@@ -71,6 +72,7 @@ class BusinessResponse(BaseModel):
             shopify_shop_domain=row.shopify_shop_domain,
             weekly_spend_cap_cents=row.weekly_spend_cap_cents,
             per_auth_cap_cents=row.per_auth_cap_cents,
+            allowed_mcc_codes=row.allowed_mcc_codes,
             brand_kit=row.brand_kit,
             created_at=row.created_at,
             updated_at=row.updated_at,
@@ -81,6 +83,15 @@ class BusinessResponse(BaseModel):
 class UpdateBusinessRequest(BaseModel):
     weekly_spend_cap_cents: Annotated[int, Field(ge=0, le=10_000_000)] | None = None
     per_auth_cap_cents: Annotated[int, Field(ge=0, le=10_000_000)] | None = None
+    # List means "override the default allowlist with this set". Explicit
+    # empty list [] means "allow nothing" (effectively locks the card).
+    # To restore the default, the client sends null / omits the field via a
+    # different sentinel — see patch handler.
+    allowed_mcc_codes: list[str] | None = None
+    # Sentinel: when true, reset allowed_mcc_codes to NULL (i.e., back to the
+    # default allowlist). Distinct from passing null above (which leaves the
+    # field unset, not reset).
+    reset_mcc_codes_to_default: bool = False
 
 
 @router.post("", response_model=BusinessResponse, status_code=201)
@@ -152,6 +163,20 @@ async def update_business(
     if body.per_auth_cap_cents is not None:
         biz.per_auth_cap_cents = body.per_auth_cap_cents
         changed = True
+    if body.reset_mcc_codes_to_default:
+        biz.allowed_mcc_codes = None
+        changed = True
+    elif body.allowed_mcc_codes is not None:
+        # Normalize: strip whitespace, dedupe, keep order.
+        seen: set[str] = set()
+        normalized: list[str] = []
+        for code in body.allowed_mcc_codes:
+            c = code.strip()
+            if c and c not in seen:
+                seen.add(c)
+                normalized.append(c)
+        biz.allowed_mcc_codes = normalized
+        changed = True
     if not changed:
         return BusinessResponse.from_row(biz)
 
@@ -165,6 +190,7 @@ async def update_business(
                 card_id=biz.stripe_card_id,
                 weekly_spend_cap_cents=biz.weekly_spend_cap_cents,
                 per_auth_cap_cents=biz.per_auth_cap_cents,
+                allowed_mcc_codes=biz.allowed_mcc_codes,
             )
             stripe_sync["synced"] = True
         except Exception as e:  # surface sync failure to client
