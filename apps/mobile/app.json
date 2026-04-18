@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Helm",
+    "slug": "helm",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "scheme": "helm",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.helm.mobile"
+    },
+    "android": {
+      "package": "app.helm.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0A"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
