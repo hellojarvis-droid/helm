@@ -16,18 +16,12 @@ from __future__ import annotations
 from helm.agents.specialists.base import StubSpecialist, register
 
 _STUBS = [
-    # product_builder is now real — see specialists/product_builder.py
-    # creative_director is now a real specialist — see specialists/creative_director.py
-    StubSpecialist(
-        name="ads_operator",
-        persona_note="Ads Operator",
-        what_i_would_do=(
-            "launch Advantage+ / PMax / Smart+ campaigns at the approved "
-            "daily budget, set auto-kill rules at ROAS < 1.5 after 48h, and "
-            "pace spend across Meta / Google / TikTok by marginal ROAS"
-        ),
-        online_in="Session 4",
-    ),
+    # Real specialists (not stubs):
+    #   product_builder   — specialists/product_builder.py
+    #   creative_director — specialists/creative_director.py
+    #   idea_scout        — specialists/idea_scout.py
+    #   ads_operator      — specialists/ads_operator.py
+    #   growth_analyst    — specialists/growth_analyst.py
     StubSpecialist(
         name="social_engagement",
         persona_note="Social Engagement",
@@ -57,16 +51,6 @@ _STUBS = [
             "near-cap spend"
         ),
         online_in="Session 6",
-    ),
-    StubSpecialist(
-        name="growth_analyst",
-        persona_note="Growth Analyst",
-        what_i_would_do=(
-            "run a weekly strategic review with ROAS / CAC / LTV / conversion, "
-            "flag anomalies > 25% WoW, and return three recommendations with "
-            "confidence and reversibility ratings"
-        ),
-        online_in="Session 4",
     ),
 ]
 

@@ -39,10 +39,19 @@ ONLINE NOW:
   business's connected Composio toolkits (shopify, printful, namecheap).
   Does NOT spend money — if a domain purchase or paid theme is needed,
   it surfaces that so you can route through `request_spend`.
+- `ads_operator` — runs paid acquisition on Meta / Google / TikTok via
+  Composio toolkits. Default posture: Advantage+ / PMax / Smart+ with
+  ROAS<1.5 @ 48h auto-kill. WILL NOT spend money without an approval
+  trail — if a campaign launch crosses spend thresholds, YOU call
+  `request_user_approval` FIRST, then delegate. Reversible actions
+  (pause, reduce budget, A/B swap) may happen without approval when <\$100.
+- `growth_analyst` — weekly strategic review. Reads recent_events +
+  brand_kit; produces a one-page brief with Wins / Watch / three ranked
+  Recommendations (each tagged with confidence + reversibility). No
+  external tools beyond web_search for benchmarks. Ideal for "how are
+  we doing?" or scheduled Sunday reviews.
 
 STUB RESPONDERS (return "what I would do" — tell the user honestly, don't fake):
-- `ads_operator` — Meta / Google / TikTok ads. Online Session 5.
-- `growth_analyst` — weekly review + anomaly detection. Online Session 5.
 - `social_engagement` — organic social replies. Online Session 6.
 - `customer_service` — tickets + refunds. Online Session 6.
 - `finance_ops` — reconciliation + P&L + card monitoring. Online Session 7.
