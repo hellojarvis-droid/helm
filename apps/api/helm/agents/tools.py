@@ -20,11 +20,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.agents.specialists.base import invoke as invoke_specialist
-from helm.db.models import Approval, Business
-from helm.services import event_log
+from helm.db.models import Approval, Business, User
+from helm.services import event_log, push
 
 _VERTICALS = {"dtc_physical", "dtc_pod", "saas", "services"}
 
@@ -361,6 +362,28 @@ async def _request_user_approval(ctx: ToolContext, args: dict[str, Any]) -> dict
         )
     )
 
+    # Fire push so a backgrounded phone buzzes. Best-effort; no-op when the
+    # user hasn't registered a token yet.
+    user_row = (
+        await ctx.db.execute(select(User).where(User.id == ctx.user_id))
+    ).scalar_one_or_none()
+    if user_row is not None:
+        amount_cents = row.details.get("amount_cents") if isinstance(row.details, dict) else None
+        if isinstance(amount_cents, int) and amount_cents > 0:
+            title = f"Approve ${amount_cents / 100:.0f}?"
+        else:
+            title = "Approval needed"
+        await push.send_to_user(
+            user_row.expo_push_token,
+            title=title,
+            body=row.summary[:160],
+            data={
+                "type": "approval_requested",
+                "approval_id": str(row.id),
+                "business_id": str(biz_id),
+            },
+        )
+
     return {
         "approval_id": str(row.id),
         "status": "pending",
@@ -438,9 +461,7 @@ async def _request_spend(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
     # Verify the business belongs to the caller (defense-in-depth; the CEO
     # session is already user-scoped but args come from the model).
     biz_row = await ctx.db.execute(
-        __import__("sqlalchemy")
-        .select(Business)
-        .where(Business.id == biz_id, Business.user_id == ctx.user_id)
+        select(Business).where(Business.id == biz_id, Business.user_id == ctx.user_id)
     )
     biz = biz_row.scalar_one_or_none()
     if biz is None:

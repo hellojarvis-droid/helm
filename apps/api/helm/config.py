@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = Field("", alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field("https://cloud.langfuse.com", alias="LANGFUSE_HOST")
 
+    # Expo push (optional). Used to authorize server-to-Expo push sends via
+    # the Enhanced Security bearer. When unset, Expo accepts unauthenticated
+    # sends in dev.
+    expo_access_token: str = Field("", alias="EXPO_ACCESS_TOKEN")
+
     # Phase 1+ — not yet exercised
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
     composio_api_key: str = Field("", alias="COMPOSIO_API_KEY")

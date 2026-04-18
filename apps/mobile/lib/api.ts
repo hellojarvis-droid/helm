@@ -16,7 +16,7 @@ async function authHeader(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}` };
 }
 
-async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const env = mobileEnv();
   const headers = { ...(init.headers ?? {}), ...(await authHeader()) };
   return fetch(`${env.helmApiBase}${path}`, { ...init, headers });
