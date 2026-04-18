@@ -445,6 +445,12 @@ export async function listApprovals(status?: Approval["status"]): Promise<Approv
   return res.json();
 }
 
+export async function getApproval(id: string): Promise<Approval> {
+  const res = await apiFetch(`/approvals/${id}`);
+  if (!res.ok) throw new Error(`getApproval ${res.status}`);
+  return res.json();
+}
+
 export async function respondToApproval(
   approvalId: string,
   status: "approved" | "denied" | "modified",

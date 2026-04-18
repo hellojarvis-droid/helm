@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -106,6 +107,7 @@ function Card({
     modifications?: Record<string, unknown>,
   ) => void;
 }) {
+  const router = useRouter();
   const pending = approval.status === "pending";
   const d = approval.details ?? {};
   const isSpend =
@@ -159,6 +161,11 @@ function Card({
           </Pressable>
         </View>
       ) : null}
+      <Pressable
+        onPress={() => router.push({ pathname: "/approval/[id]", params: { id: approval.id } })}
+      >
+        <Text style={styles.openDetail}>Open detail →</Text>
+      </Pressable>
     </View>
   );
 }
@@ -253,4 +260,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(107,107,107,0.3)",
   },
   denyText: { color: colors.iron, fontWeight: "500" },
+  openDetail: {
+    color: colors.iron,
+    fontSize: 12,
+    marginTop: 12,
+  },
 });
