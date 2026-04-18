@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { respondToApproval, streamChatTurn, type ChatEvent } from "@/lib/api";
 import { colors } from "@/lib/colors";
+import { useKillSwitch } from "@/lib/useKillSwitch";
 
 type ApprovalPart = {
   kind: "approval";
@@ -38,6 +39,7 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const listRef = useRef<FlatList<TurnPart>>(null);
+  const { active: paused } = useKillSwitch();
 
   useEffect(() => {
     // Auto-scroll on every append so the newest part is always visible.
@@ -134,6 +136,11 @@ export default function ChatScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {paused ? (
+        <View style={styles.pausedBanner}>
+          <Text style={styles.pausedText}>● All agents paused — open Safety to resume</Text>
+        </View>
+      ) : null}
       <FlatList
         ref={listRef}
         data={parts}
@@ -280,6 +287,17 @@ function PendingText({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
+  pausedBanner: {
+    backgroundColor: colors.danger,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  pausedText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
   list: { padding: 16, gap: 8 },
   empty: { textAlign: "center", marginTop: 80, color: colors.iron, fontSize: 14 },
   userRow: { alignItems: "flex-end", marginBottom: 8 },

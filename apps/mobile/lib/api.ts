@@ -244,6 +244,30 @@ export async function syncIntegration(integrationId: string): Promise<Integratio
 }
 
 // ──────────────────────────────────────────────────────────
+// Kill switch — CLAUDE.md hard rule #2
+// ──────────────────────────────────────────────────────────
+
+export interface KillSwitchState {
+  active: boolean;
+}
+
+export async function getKillSwitch(): Promise<KillSwitchState> {
+  const res = await apiFetch("/users/me/kill_switch");
+  if (!res.ok) throw new Error(`getKillSwitch ${res.status}`);
+  return res.json();
+}
+
+export async function setKillSwitch(active: boolean): Promise<KillSwitchState> {
+  const res = await apiFetch("/users/me/kill_switch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ active }),
+  });
+  if (!res.ok) throw new Error(`setKillSwitch ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ──────────────────────────────────────────────────────────
 // Approvals
 // ──────────────────────────────────────────────────────────
 
