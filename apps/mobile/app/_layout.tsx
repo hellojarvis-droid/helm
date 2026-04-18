@@ -5,7 +5,12 @@ import { useEffect, useState } from "react";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { colors } from "@/lib/colors";
 import { registerForPushNotifications } from "@/lib/push";
+import { initSentry } from "@/lib/sentry";
 import { supabase } from "@/lib/supabase";
+
+// Sentry init at module load — captures errors from any code that runs
+// before the first React render. Idempotent + silent no-op without DSN.
+initSentry();
 
 /**
  * Root layout. Gates rendering on a first auth check so we don't flash

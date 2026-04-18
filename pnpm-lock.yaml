@@ -29,6 +29,9 @@ importers:
       '@react-native-async-storage/async-storage':
         specifier: 1.23.1
         version: 1.23.1(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1))
+      '@sentry/react-native':
+        specifier: ~6.4.0
+        version: 6.4.0(expo@52.0.49(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@expo/metro-runtime@4.0.1(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1)))(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1))(react@18.3.1))(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)
       '@supabase/supabase-js':
         specifier: ^2.47.0
         version: 2.103.3
@@ -1961,17 +1964,37 @@ packages:
     resolution: {integrity: sha512-n0QRx0Ysx6mPfIydTkz7VP0FmwM+/EqMZiRqdsU3aTYsngE9GmEDV0OL1bAy6a8N/C1xf9vntkuAtj6N/8Z51w==}
     engines: {node: '>=18'}
 
+  '@sentry-internal/browser-utils@8.40.0':
+    resolution: {integrity: sha512-tx7gb/PWMbTEyil/XPETVeRUeS3nKHIvQY2omyebw30TbhyLnibPZsUmXJiaIysL5PcY3k9maub3W/o0Y37T7Q==}
+    engines: {node: '>=14.18'}
+
   '@sentry-internal/feedback@10.49.0':
     resolution: {integrity: sha512-JNsUBGv0faCFE7MeZUH99Y9lU9qq3LBALbLxpE1x7ngNrQnVYRlcFgdqaD/btNBKr8awjYL8gmcSkHBWskGqLQ==}
     engines: {node: '>=18'}
+
+  '@sentry-internal/feedback@8.40.0':
+    resolution: {integrity: sha512-1O9F3z80HNE0VfepKS+v+dixdatNqWlrlwgvvWl4BGzzoA+XhqvZo+HWxiOt7yx7+k1TuZNrB6Gy3u/QvpozXA==}
+    engines: {node: '>=14.18'}
 
   '@sentry-internal/replay-canvas@10.49.0':
     resolution: {integrity: sha512-7D/NrgH1Qwx5trDYaaTSSJmCb1yVQQLqFG4G/S9x2ltzl9876lSGJL8UeW8ReNQgF3CDAcwbmm/9aXaVSBUNZA==}
     engines: {node: '>=18'}
 
+  '@sentry-internal/replay-canvas@8.40.0':
+    resolution: {integrity: sha512-Zr+m/le0SH4RowZB7rBCM0aRnvH3wZTaOFhwUk03/oGf2BRcgKuDCUMjnXKC9MyOpmey7UYXkzb8ro+81R6Q8w==}
+    engines: {node: '>=14.18'}
+
   '@sentry-internal/replay@10.49.0':
     resolution: {integrity: sha512-IEy4lwHVMiRE3JAcn+kFKjsTgalDOCSTf20SoFd+nkt6rN/k1RDyr4xpdfF//Kj3UdeTmbuibYjK5H/FLhhnGg==}
     engines: {node: '>=18'}
+
+  '@sentry-internal/replay@8.40.0':
+    resolution: {integrity: sha512-0SaDsBCSWxNVgNmPKu23frrHEXzN/MKl0hIkfuO55vL5TgjLTwpgkf0Ne4rNvaZQ5omIKk9Qd63HuQP3PHAMaw==}
+    engines: {node: '>=14.18'}
+
+  '@sentry/babel-plugin-component-annotate@2.20.1':
+    resolution: {integrity: sha512-4mhEwYTK00bIb5Y9UWIELVUfru587Vaeg0DQGswv4aIRHIiMKLyNqCEejaaybQ/fNChIZOKmvyqXk430YVd7Qg==}
+    engines: {node: '>= 14'}
 
   '@sentry/babel-plugin-component-annotate@5.2.0':
     resolution: {integrity: sha512-8LbOI5Kzb5F0+7LVQPi2+zGz1iPiRRFhM+7uZ/ZQ33L9BmDOYNIy3xWxCfMw2JCuMXXaxF47XCjGmR22/B0WPg==}
@@ -1981,14 +2004,29 @@ packages:
     resolution: {integrity: sha512-bGCHc+wK2Dx67YoSbmtlt04alqWfQ+dasD/GVipVOq50gvw/BBIDHTEWRJEjACl+LrvszeY54V+24p8z4IgysA==}
     engines: {node: '>=18'}
 
+  '@sentry/browser@8.40.0':
+    resolution: {integrity: sha512-m/Yor6IDBeDHtQochu8n6z4HXrXkrPhu6+o5Ouve0Zi3ptthSoK1FOGvJxVBat3nRq0ydQyuuPuTB6WfdWbwHQ==}
+    engines: {node: '>=14.18'}
+
   '@sentry/bundler-plugin-core@5.2.0':
     resolution: {integrity: sha512-+C0x4gEIJRgoMwyRFGx+TFiJ1Po2BZlT1v61+PnouiaprKL5qtZG8n5PXx/5LPLDsVjSIcXjnDrTz9aSm8SJ3w==}
     engines: {node: '>= 18'}
+
+  '@sentry/cli-darwin@2.38.2':
+    resolution: {integrity: sha512-21ywIcJCCFrCTyiF1o1PaT7rbelFC2fWmayKYgFElnQ55IzNYkcn8BYhbh/QknE0l1NBRaeWMXwTTdeoqETCCg==}
+    engines: {node: '>=10'}
+    os: [darwin]
 
   '@sentry/cli-darwin@2.58.5':
     resolution: {integrity: sha512-lYrNzenZFJftfwSya7gwrHGxtE+Kob/e1sr9lmHMFOd4utDlmq0XFDllmdZAMf21fxcPRI1GL28ejZ3bId01fQ==}
     engines: {node: '>=10'}
     os: [darwin]
+
+  '@sentry/cli-linux-arm64@2.38.2':
+    resolution: {integrity: sha512-4Fp/jjQpNZj4Th+ZckMQvldAuuP0ZcyJ9tJCP1CCOn5poIKPYtY6zcbTP036R7Te14PS4ALOcDNX3VNKfpsifA==}
+    engines: {node: '>=10'}
+    cpu: [arm64]
+    os: [linux, freebsd]
 
   '@sentry/cli-linux-arm64@2.58.5':
     resolution: {integrity: sha512-/4gywFeBqRB6tR/iGMRAJ3HRqY6Z7Yp4l8ZCbl0TDLAfHNxu7schEw4tSnm2/Hh9eNMiOVy4z58uzAWlZXAYBQ==}
@@ -1996,17 +2034,35 @@ packages:
     cpu: [arm64]
     os: [linux, freebsd, android]
 
+  '@sentry/cli-linux-arm@2.38.2':
+    resolution: {integrity: sha512-+AiKDBQKIdQe4NhBiHSHGl0KR+b//HHTrnfK1SaTrOm9HtM4ELXAkjkRF3bmbpSzSQCS5WzcbIxxCJOeaUaO0A==}
+    engines: {node: '>=10'}
+    cpu: [arm]
+    os: [linux, freebsd]
+
   '@sentry/cli-linux-arm@2.58.5':
     resolution: {integrity: sha512-KtHweSIomYL4WVDrBrYSYJricKAAzxUgX86kc6OnlikbyOhoK6Fy8Vs6vwd52P6dvWPjgrMpUYjW2M5pYXQDUw==}
     engines: {node: '>=10'}
     cpu: [arm]
     os: [linux, freebsd, android]
 
+  '@sentry/cli-linux-i686@2.38.2':
+    resolution: {integrity: sha512-6zVJN10dHIn4R1v+fxuzlblzVBhIVwsaN/S7aBED6Vn1HhAyAcNG2tIzeCLGeDfieYjXlE2sCI82sZkQBCbAGw==}
+    engines: {node: '>=10'}
+    cpu: [x86, ia32]
+    os: [linux, freebsd]
+
   '@sentry/cli-linux-i686@2.58.5':
     resolution: {integrity: sha512-G7261dkmyxqlMdyvyP06b+RTIVzp1gZNgglj5UksxSouSUqRd/46W/2pQeOMPhloDYo9yLtCN2YFb3Mw4aUsWw==}
     engines: {node: '>=10'}
     cpu: [x86, ia32]
     os: [linux, freebsd, android]
+
+  '@sentry/cli-linux-x64@2.38.2':
+    resolution: {integrity: sha512-4UiLu9zdVtqPeltELR5MDGKcuqAdQY9xz3emISuA6bm+MXGbt2W1WgX+XY3GElwjZbmH8qpyLUEd34sw6sdcbQ==}
+    engines: {node: '>=10'}
+    cpu: [x64]
+    os: [linux, freebsd]
 
   '@sentry/cli-linux-x64@2.58.5':
     resolution: {integrity: sha512-rP04494RSmt86xChkQ+ecBNRYSPbyXc4u0IA7R7N1pSLCyO74e5w5Al+LnAq35cMfVbZgz5Sm0iGLjyiUu4I1g==}
@@ -2020,10 +2076,22 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  '@sentry/cli-win32-i686@2.38.2':
+    resolution: {integrity: sha512-DYfSvd5qLPerLpIxj3Xu2rRe3CIlpGOOfGSNI6xvJ5D8j6hqbOHlCzvfC4oBWYVYGtxnwQLMeDGJ7o7RMYulig==}
+    engines: {node: '>=10'}
+    cpu: [x86, ia32]
+    os: [win32]
+
   '@sentry/cli-win32-i686@2.58.5':
     resolution: {integrity: sha512-EsuboLSOnlrN7MMPJ1eFvfMDm+BnzOaSWl8eYhNo8W/BIrmNgpRUdBwnWn9Q2UOjJj5ZopukmsiMYtU/D7ml9g==}
     engines: {node: '>=10'}
     cpu: [x86, ia32]
+    os: [win32]
+
+  '@sentry/cli-win32-x64@2.38.2':
+    resolution: {integrity: sha512-W5UX58PKY1hNUHo9YJxWNhGvgvv2uOYHI27KchRiUvFYBIqlUUcIdPZDfyzetDfd8qBCxlAsFnkL2VJSNdpA9A==}
+    engines: {node: '>=10'}
+    cpu: [x64]
     os: [win32]
 
   '@sentry/cli-win32-x64@2.58.5':
@@ -2031,6 +2099,11 @@ packages:
     engines: {node: '>=10'}
     cpu: [x64]
     os: [win32]
+
+  '@sentry/cli@2.38.2':
+    resolution: {integrity: sha512-CR0oujpAnhegK2pBAv6ZReMqbFTuNJLDZLvoD1B+syrKZX+R+oxkgT2e1htsBbht+wGxAsluVWsIAydSws1GAA==}
+    engines: {node: '>= 10'}
+    hasBin: true
 
   '@sentry/cli@2.58.5':
     resolution: {integrity: sha512-tavJ7yGUZV+z3Ct2/ZB6mg339i08sAk6HDkgqmSRuQEu2iLS5sl9HIvuXfM6xjv8fwlgFOSy++WNABNAcGHUbg==}
@@ -2040,6 +2113,10 @@ packages:
   '@sentry/core@10.49.0':
     resolution: {integrity: sha512-UaFeum3LUM1mB0d67jvKnqId1yWQjyqmaDV6kWngG03x+jqXb08tJdGpSoxjXZe13jFBbiBL/wKDDYIK7rCK4g==}
     engines: {node: '>=18'}
+
+  '@sentry/core@8.40.0':
+    resolution: {integrity: sha512-u/U2CJpG/+SmTR2bPM4ZZoPYTJAOUuxzj/0IURnvI0v9+rNu939J/fzrO9huA5IJVxS5TiYykhQm7o6I3Zuo3Q==}
+    engines: {node: '>=14.18'}
 
   '@sentry/nextjs@10.49.0':
     resolution: {integrity: sha512-oVSbTbedZUfDFdgrkNpV9tclSAYF/bs+3rxKNH0KXte2dXj4nrvoinzA/3PTjbfjfgDYfInDHSPdlJv6Ev7lmA==}
@@ -2084,11 +2161,36 @@ packages:
       '@opentelemetry/sdk-trace-base': ^1.30.1 || ^2.1.0
       '@opentelemetry/semantic-conventions': ^1.39.0
 
+  '@sentry/react-native@6.4.0':
+    resolution: {integrity: sha512-nV1czQrPC+gF59N264u+C0yu6i0ohxHSk7+8gJm4zezQPfPr8h+XIO+uCINrMlm9VswI6cJBkqvjr8JL2873jg==}
+    hasBin: true
+    peerDependencies:
+      expo: '>=49.0.0'
+      react: '>=17.0.0'
+      react-native: '>=0.65.0'
+    peerDependenciesMeta:
+      expo:
+        optional: true
+
   '@sentry/react@10.49.0':
     resolution: {integrity: sha512-WdfJve0orTiumr25Ozgs2p2KaJR9xV82Z5V9IYBi0TadsurSWK6xI6SAFjw84tQht9Fp8q4UCn3QYCnApF4BfA==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^16.14.0 || 17.x || 18.x || 19.x
+
+  '@sentry/react@8.40.0':
+    resolution: {integrity: sha512-Ohq/po83r9sh/DCO6VAxx4xU+1ztvFzmXTl3fUnAEc+2bFJK1MsRt6BWfG37XxjQN//mfmyS9KEBgsOpOyd4LQ==}
+    engines: {node: '>=14.18'}
+    peerDependencies:
+      react: ^16.14.0 || 17.x || 18.x || 19.x
+
+  '@sentry/types@8.40.0':
+    resolution: {integrity: sha512-nuCf3U3deolPM9BjNnwCc33UtFl9ec15/r74ngAkNccn+A2JXdIAsDkGJMO/9mgSFykLe1QyeJ0pQFRisCGOiA==}
+    engines: {node: '>=14.18'}
+
+  '@sentry/utils@8.40.0':
+    resolution: {integrity: sha512-JrfnrQ4irbXWTb+8QC5TCefr3KJJ1x4tJr5p+HyVy4df0n7SIvSqQNeG2P8uuT82F4puFsD6hkQYxuGr3y/NSw==}
+    engines: {node: '>=14.18'}
 
   '@sentry/vercel-edge@10.49.0':
     resolution: {integrity: sha512-CL2Ggl5jFc5q3+tLhapRJMR7Ya9l/OxvnK55OG/FAwvhjfODz4V/Hf5bdOqU9LrsXXg4gWKqag/v5CBDDun8jg==}
@@ -8525,19 +8627,43 @@ snapshots:
     dependencies:
       '@sentry/core': 10.49.0
 
+  '@sentry-internal/browser-utils@8.40.0':
+    dependencies:
+      '@sentry/core': 8.40.0
+      '@sentry/types': 8.40.0
+
   '@sentry-internal/feedback@10.49.0':
     dependencies:
       '@sentry/core': 10.49.0
+
+  '@sentry-internal/feedback@8.40.0':
+    dependencies:
+      '@sentry/core': 8.40.0
+      '@sentry/types': 8.40.0
 
   '@sentry-internal/replay-canvas@10.49.0':
     dependencies:
       '@sentry-internal/replay': 10.49.0
       '@sentry/core': 10.49.0
 
+  '@sentry-internal/replay-canvas@8.40.0':
+    dependencies:
+      '@sentry-internal/replay': 8.40.0
+      '@sentry/core': 8.40.0
+      '@sentry/types': 8.40.0
+
   '@sentry-internal/replay@10.49.0':
     dependencies:
       '@sentry-internal/browser-utils': 10.49.0
       '@sentry/core': 10.49.0
+
+  '@sentry-internal/replay@8.40.0':
+    dependencies:
+      '@sentry-internal/browser-utils': 8.40.0
+      '@sentry/core': 8.40.0
+      '@sentry/types': 8.40.0
+
+  '@sentry/babel-plugin-component-annotate@2.20.1': {}
 
   '@sentry/babel-plugin-component-annotate@5.2.0': {}
 
@@ -8548,6 +8674,15 @@ snapshots:
       '@sentry-internal/replay': 10.49.0
       '@sentry-internal/replay-canvas': 10.49.0
       '@sentry/core': 10.49.0
+
+  '@sentry/browser@8.40.0':
+    dependencies:
+      '@sentry-internal/browser-utils': 8.40.0
+      '@sentry-internal/feedback': 8.40.0
+      '@sentry-internal/replay': 8.40.0
+      '@sentry-internal/replay-canvas': 8.40.0
+      '@sentry/core': 8.40.0
+      '@sentry/types': 8.40.0
 
   '@sentry/bundler-plugin-core@5.2.0':
     dependencies:
@@ -8562,16 +8697,31 @@ snapshots:
       - encoding
       - supports-color
 
+  '@sentry/cli-darwin@2.38.2':
+    optional: true
+
   '@sentry/cli-darwin@2.58.5':
+    optional: true
+
+  '@sentry/cli-linux-arm64@2.38.2':
     optional: true
 
   '@sentry/cli-linux-arm64@2.58.5':
     optional: true
 
+  '@sentry/cli-linux-arm@2.38.2':
+    optional: true
+
   '@sentry/cli-linux-arm@2.58.5':
     optional: true
 
+  '@sentry/cli-linux-i686@2.38.2':
+    optional: true
+
   '@sentry/cli-linux-i686@2.58.5':
+    optional: true
+
+  '@sentry/cli-linux-x64@2.38.2':
     optional: true
 
   '@sentry/cli-linux-x64@2.58.5':
@@ -8580,11 +8730,36 @@ snapshots:
   '@sentry/cli-win32-arm64@2.58.5':
     optional: true
 
+  '@sentry/cli-win32-i686@2.38.2':
+    optional: true
+
   '@sentry/cli-win32-i686@2.58.5':
+    optional: true
+
+  '@sentry/cli-win32-x64@2.38.2':
     optional: true
 
   '@sentry/cli-win32-x64@2.58.5':
     optional: true
+
+  '@sentry/cli@2.38.2':
+    dependencies:
+      https-proxy-agent: 5.0.1
+      node-fetch: 2.7.0
+      progress: 2.0.3
+      proxy-from-env: 1.1.0
+      which: 2.0.2
+    optionalDependencies:
+      '@sentry/cli-darwin': 2.38.2
+      '@sentry/cli-linux-arm': 2.38.2
+      '@sentry/cli-linux-arm64': 2.38.2
+      '@sentry/cli-linux-i686': 2.38.2
+      '@sentry/cli-linux-x64': 2.38.2
+      '@sentry/cli-win32-i686': 2.38.2
+      '@sentry/cli-win32-x64': 2.38.2
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
 
   '@sentry/cli@2.58.5':
     dependencies:
@@ -8607,6 +8782,10 @@ snapshots:
       - supports-color
 
   '@sentry/core@10.49.0': {}
+
+  '@sentry/core@8.40.0':
+    dependencies:
+      '@sentry/types': 8.40.0
 
   '@sentry/nextjs@10.49.0(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(next@15.5.15(@opentelemetry/api@1.9.1)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react@19.2.5)(webpack@5.106.2)':
     dependencies:
@@ -8691,11 +8870,43 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.40.0
       '@sentry/core': 10.49.0
 
+  '@sentry/react-native@6.4.0(expo@52.0.49(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@expo/metro-runtime@4.0.1(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1)))(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1))(react@18.3.1))(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@sentry/babel-plugin-component-annotate': 2.20.1
+      '@sentry/browser': 8.40.0
+      '@sentry/cli': 2.38.2
+      '@sentry/core': 8.40.0
+      '@sentry/react': 8.40.0(react@18.3.1)
+      '@sentry/types': 8.40.0
+      '@sentry/utils': 8.40.0
+      react: 18.3.1
+      react-native: 0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1)
+    optionalDependencies:
+      expo: 52.0.49(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@expo/metro-runtime@4.0.1(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1)))(react-native@0.76.3(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
   '@sentry/react@10.49.0(react@19.2.5)':
     dependencies:
       '@sentry/browser': 10.49.0
       '@sentry/core': 10.49.0
       react: 19.2.5
+
+  '@sentry/react@8.40.0(react@18.3.1)':
+    dependencies:
+      '@sentry/browser': 8.40.0
+      '@sentry/core': 8.40.0
+      '@sentry/types': 8.40.0
+      hoist-non-react-statics: 3.3.2
+      react: 18.3.1
+
+  '@sentry/types@8.40.0': {}
+
+  '@sentry/utils@8.40.0':
+    dependencies:
+      '@sentry/core': 8.40.0
+      '@sentry/types': 8.40.0
 
   '@sentry/vercel-edge@10.49.0':
     dependencies:
