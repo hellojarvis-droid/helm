@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
@@ -17,4 +18,19 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+// Wrap with Sentry only when the project is configured. Source-maps upload
+// is skipped when SENTRY_AUTH_TOKEN is missing so local dev and CI without
+// Sentry secrets still build cleanly.
+export default process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? withSentryConfig(config, {
+      silent: true,
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      disableLogger: true,
+      widenClientFileUpload: true,
+      sourcemaps: {
+        disable: false,
+      },
+    })
+  : config;
