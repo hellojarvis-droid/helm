@@ -8,6 +8,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 const items = [
   { href: "/chat" as const, label: "Chat" },
   { href: "/businesses" as const, label: "Businesses" },
+  { href: "/approvals" as const, label: "Approvals" },
 ];
 
 export function Nav() {

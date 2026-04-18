@@ -116,3 +116,63 @@ export async function createBusiness(body: {
   if (!res.ok) throw new Error(`createBusiness: ${res.status} ${await res.text()}`);
   return res.json();
 }
+
+export async function getBusiness(id: string): Promise<
+  Business & {
+    stripe_account_id: string | null;
+    brand_kit: Record<string, unknown>;
+  }
+> {
+  const res = await apiFetch(`/businesses/${id}`);
+  if (!res.ok) throw new Error(`getBusiness: ${res.status}`);
+  return res.json();
+}
+
+export interface StripeOnboardResponse {
+  account_id: string;
+  onboarding_url: string;
+  expires_at: number;
+  reused_existing_account: boolean;
+}
+
+export async function startStripeOnboarding(businessId: string): Promise<StripeOnboardResponse> {
+  const res = await apiFetch(`/businesses/${businessId}/stripe/onboard`, { method: "POST" });
+  if (!res.ok) throw new Error(`startStripeOnboarding: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+// ──────────────────────────────────────────────────────────
+// Approvals
+// ──────────────────────────────────────────────────────────
+
+export interface Approval {
+  id: string;
+  business_id: string;
+  kind: string;
+  summary: string;
+  status: "pending" | "approved" | "denied" | "modified" | "expired";
+  requested_at: string;
+  responded_at: string | null;
+  expires_at: string;
+  details: Record<string, unknown>;
+}
+
+export async function listApprovals(status?: Approval["status"]): Promise<Approval[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await apiFetch(`/approvals${qs}`);
+  if (!res.ok) throw new Error(`listApprovals: ${res.status}`);
+  return res.json();
+}
+
+export async function respondToApproval(
+  approvalId: string,
+  status: "approved" | "denied",
+): Promise<Approval> {
+  const res = await apiFetch(`/approvals/${approvalId}/respond`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error(`respondToApproval: ${res.status} ${await res.text()}`);
+  return res.json();
+}

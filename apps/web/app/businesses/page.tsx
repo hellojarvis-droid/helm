@@ -46,7 +46,7 @@ export default function BusinessesPage() {
         ) : (
           <div className="grid gap-3">
             {rows.map((b) => (
-              <Link key={b.id} href={{ pathname: "/chat" }}>
+              <Link key={b.id} href={`/businesses/${b.id}` as never}>
                 <Card className="hover:border-accent/40 transition-colors cursor-pointer">
                   <div className="flex items-baseline justify-between">
                     <div>
