@@ -235,6 +235,12 @@ export interface Approval {
   } | null;
 }
 
+export async function getApproval(id: string): Promise<Approval> {
+  const res = await apiFetch(`/approvals/${id}`);
+  if (!res.ok) throw new Error(`getApproval: ${res.status}`);
+  return res.json();
+}
+
 export async function listApprovals(status?: Approval["status"]): Promise<Approval[]> {
   const qs = status ? `?status=${encodeURIComponent(status)}` : "";
   const res = await apiFetch(`/approvals${qs}`);

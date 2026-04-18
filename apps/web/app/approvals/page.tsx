@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/Button";
@@ -213,6 +214,12 @@ function ApprovalRow({
           </Button>
         </div>
       )}
+      <Link
+        href={`/approvals/${approval.id}` as never}
+        className="inline-block mt-3 text-xs text-iron hover:text-ink dark:hover:text-paper"
+      >
+        Open detail →
+      </Link>
     </div>
   );
 }
