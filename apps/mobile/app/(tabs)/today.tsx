@@ -49,7 +49,25 @@ export default function TodayScreen() {
         {data === null && !error ? (
           <ActivityIndicator style={{ marginTop: 60 }} color={colors.iron} />
         ) : null}
-        {data ? (
+        {data && data.businesses.length === 0 ? (
+          <View style={styles.heroBlock}>
+            <Text style={styles.heroEyebrow}>Welcome to Helm</Text>
+            <Text style={styles.heroTitle}>Tell your CEO Agent what to launch.</Text>
+            <Text style={styles.heroBody}>
+              Eight specialists are standing by. Idea Scout finds proven concepts. Creative Director
+              builds the brand. Product Builder stands up the storefront. Ads Operator buys the
+              first traffic.
+            </Text>
+            <Pressable
+              style={styles.heroPrimary}
+              onPress={() => router.push({ pathname: "/(tabs)/chat" })}
+            >
+              <Text style={styles.heroPrimaryText}>Open chat →</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {data && data.businesses.length > 0 ? (
           <>
             <View style={styles.headline}>
               <Text style={styles.label}>Net last 24h</Text>
@@ -83,23 +101,15 @@ export default function TodayScreen() {
             ) : null}
 
             <Text style={styles.sectionTitle}>Businesses</Text>
-            {data.businesses.length === 0 ? (
-              <Text style={styles.muted}>
-                No businesses yet. Create one to give the CEO Agent something to work on.
-              </Text>
-            ) : (
-              <View style={{ gap: 8 }}>
-                {data.businesses.map((b) => (
-                  <BusinessRow
-                    key={b.id}
-                    biz={b}
-                    onPress={() =>
-                      router.push({ pathname: "/business/[id]", params: { id: b.id } })
-                    }
-                  />
-                ))}
-              </View>
-            )}
+            <View style={{ gap: 8 }}>
+              {data.businesses.map((b) => (
+                <BusinessRow
+                  key={b.id}
+                  biz={b}
+                  onPress={() => router.push({ pathname: "/business/[id]", params: { id: b.id } })}
+                />
+              ))}
+            </View>
           </>
         ) : null}
       </ScrollView>
@@ -140,6 +150,37 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, fontSize: 13 },
   muted: { color: colors.iron, fontSize: 13, lineHeight: 19 },
 
+  heroBlock: { paddingTop: 32, paddingBottom: 24, gap: 12, alignItems: "center" },
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 2,
+    color: colors.accent,
+    textTransform: "uppercase",
+  },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: "600",
+    color: colors.ink,
+    textAlign: "center",
+    paddingHorizontal: 8,
+    lineHeight: 32,
+  },
+  heroBody: {
+    fontSize: 14,
+    color: colors.iron,
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 16,
+  },
+  heroPrimary: {
+    marginTop: 8,
+    backgroundColor: colors.accent,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  heroPrimaryText: { color: colors.paper, fontWeight: "600", fontSize: 15 },
   headline: { gap: 2 },
   label: {
     color: colors.iron,

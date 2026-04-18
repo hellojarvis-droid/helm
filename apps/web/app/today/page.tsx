@@ -24,7 +24,9 @@ export default function TodayPage() {
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {!data && !error ? <p className="text-sm text-iron">Loading…</p> : null}
 
-        {data ? (
+        {data && data.businesses.length === 0 ? <ZeroBusinessHero /> : null}
+
+        {data && data.businesses.length > 0 ? (
           <>
             <header>
               <div className="text-xs font-semibold tracking-widest text-iron uppercase mb-1">
@@ -59,23 +61,47 @@ export default function TodayPage() {
               <h2 className="text-xs font-semibold tracking-widest text-iron uppercase mb-3">
                 Businesses
               </h2>
-              {data.businesses.length === 0 ? (
-                <Card>
-                  <p className="text-sm text-iron">
-                    No businesses yet. Create one to give the CEO Agent something to work on.
-                  </p>
-                </Card>
-              ) : (
-                <ul className="space-y-2">
-                  {data.businesses.map((b) => (
-                    <BusinessRow key={b.id} biz={b} />
-                  ))}
-                </ul>
-              )}
+              <ul className="space-y-2">
+                {data.businesses.map((b) => (
+                  <BusinessRow key={b.id} biz={b} />
+                ))}
+              </ul>
             </section>
           </>
         ) : null}
       </main>
+    </div>
+  );
+}
+
+function ZeroBusinessHero() {
+  return (
+    <div className="text-center py-12 space-y-4">
+      <div className="text-xs font-semibold tracking-widest text-accent uppercase">
+        Welcome to Helm
+      </div>
+      <h1 className="text-3xl font-semibold tracking-tight max-w-md mx-auto leading-tight">
+        Tell your CEO Agent what to launch.
+      </h1>
+      <p className="text-sm text-iron max-w-md mx-auto leading-relaxed">
+        Eight specialists are standing by. Idea Scout finds proven concepts. Creative Director
+        builds the brand. Product Builder stands up the storefront. Ads Operator buys the first
+        traffic.
+      </p>
+      <div className="flex justify-center gap-2 pt-2">
+        <Link
+          href={{ pathname: "/chat" }}
+          className="inline-flex items-center justify-center h-11 px-5 rounded-md bg-accent text-paper text-sm font-medium hover:bg-accent/90"
+        >
+          Open chat →
+        </Link>
+        <Link
+          href={{ pathname: "/businesses/new" }}
+          className="inline-flex items-center justify-center h-11 px-5 rounded-md border border-iron/30 text-sm hover:bg-haze"
+        >
+          Or create a business manually
+        </Link>
+      </div>
     </div>
   );
 }
