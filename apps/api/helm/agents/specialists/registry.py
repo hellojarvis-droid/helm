@@ -10,5 +10,6 @@ from __future__ import annotations
 from helm.agents.specialists import (  # noqa: F401 — import-for-side-effect
     creative_director,
     idea_scout,
+    product_builder,
     stubs,
 )

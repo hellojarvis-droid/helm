@@ -16,17 +16,7 @@ from __future__ import annotations
 from helm.agents.specialists.base import StubSpecialist, register
 
 _STUBS = [
-    StubSpecialist(
-        name="product_builder",
-        persona_note="Product Builder",
-        what_i_would_do=(
-            "pick a domain, spin up a Shopify store on the Dawn theme, load "
-            "5-10 SKUs from Printful or CJ Dropshipping, install standard "
-            "policies, connect Stripe via the business's Stripe Issuing card, "
-            "run a Lighthouse check, and hand you a live URL inside 15 minutes"
-        ),
-        online_in="Session 3",
-    ),
+    # product_builder is now real — see specialists/product_builder.py
     # creative_director is now a real specialist — see specialists/creative_director.py
     StubSpecialist(
         name="ads_operator",

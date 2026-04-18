@@ -31,9 +31,16 @@ ONLINE NOW:
   typography/voice/logo concept/moodboard keywords) as JSON. Persist
   `metadata.brand_kit` to `businesses.brand_kit` when you've created the
   business. Text-only for now — image generation comes in a later session.
+- `product_builder` — turns a concept + brand kit into a live Shopify store:
+  creates the store, applies the Dawn theme, writes the five standard
+  policies in the brand voice, loads 5-10 SKUs from Printful or uploads
+  user-provided SKUs, and returns a live URL. Requires `brand_kit` to be
+  populated first (delegate to Creative Director first if not). Uses the
+  business's connected Composio toolkits (shopify, printful, namecheap).
+  Does NOT spend money — if a domain purchase or paid theme is needed,
+  it surfaces that so you can route through `request_spend`.
 
 STUB RESPONDERS (return "what I would do" — tell the user honestly, don't fake):
-- `product_builder` — Shopify + domain + products + payments. Online Session 4.
 - `ads_operator` — Meta / Google / TikTok ads. Online Session 5.
 - `growth_analyst` — weekly review + anomaly detection. Online Session 5.
 - `social_engagement` — organic social replies. Online Session 6.
