@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     api_base_url: str = Field("http://localhost:8000", alias="API_BASE_URL")
     web_base_url: str = Field("http://localhost:3000", alias="WEB_BASE_URL")
 
+    # CORS — comma-separated list of origins allowed to call the API.
+    # Local dev defaults to the Next dev server; prod sets the Vercel domain
+    # in Render env. Empty string = CORS disabled (API unreachable from browser).
+    web_origin_allowlist: str = Field(
+        default="http://localhost:3000", alias="WEB_ORIGIN_ALLOWLIST"
+    )
+
     # Database — Supabase Postgres
     database_url: str = Field("", alias="DATABASE_URL")
 

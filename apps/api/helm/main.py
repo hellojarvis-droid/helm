@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 import sentry_sdk
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from helm.config import get_settings
 from helm.logging import configure_logging
@@ -61,6 +62,24 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url=None,
     )
+
+    # CORS — parse the env allowlist into a list of origins.
+    # Origins are compared exact-match (scheme + host + port). Use a
+    # FastAPI-level allowlist rather than * because we pass Authorization
+    # bearer tokens and want the browser to honor CORS credentials rules.
+    settings = get_settings()
+    origins = [o.strip() for o in settings.web_origin_allowlist.split(",") if o.strip()]
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["*"],
+            expose_headers=["x-trace-id"],
+            max_age=86400,
+        )
+
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_routes.router)
     app.include_router(auth_routes.router)
