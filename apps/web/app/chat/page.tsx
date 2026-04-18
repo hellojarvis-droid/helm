@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApprovalCard } from "@/components/chat/ApprovalCard";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/Button";
-import { apiFetch, streamChat, type ChatEvent } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { apiFetch, type Business, listBusinesses, streamChat, type ChatEvent } from "@/lib/api";
 
 type TurnPart =
   | { kind: "user"; text: string }
@@ -18,7 +19,18 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [scopedBizId, setScopedBizId] = useState<string | undefined>(undefined);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    listBusinesses()
+      .then(setBusinesses)
+      .catch(() => {
+        // Silent: business picker is a nice-to-have. Without the list,
+        // the user just gets the unscoped CEO conversation.
+      });
+  }, []);
 
   async function send() {
     const text = input.trim();
@@ -34,7 +46,7 @@ export default function ChatPage() {
 
     let acc = "";
     try {
-      for await (const ev of streamChat(text, undefined, controller.signal)) {
+      for await (const ev of streamChat(text, scopedBizId, controller.signal)) {
         if (ev.kind === "text_delta") {
           acc += ev.text;
           setPending(acc);
@@ -116,7 +128,24 @@ export default function ChatPage() {
         {error && <div className="text-sm text-danger">{error}</div>}
       </main>
 
-      <footer className="border-t border-iron/20 px-6 py-4 max-w-3xl w-full mx-auto">
+      <footer className="border-t border-iron/20 px-6 py-4 max-w-3xl w-full mx-auto space-y-3">
+        {businesses.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            <BusinessPill
+              label="All businesses"
+              active={scopedBizId === undefined}
+              onClick={() => setScopedBizId(undefined)}
+            />
+            {businesses.map((b) => (
+              <BusinessPill
+                key={b.id}
+                label={b.name}
+                active={scopedBizId === b.id}
+                onClick={() => setScopedBizId(b.id)}
+              />
+            ))}
+          </div>
+        ) : null}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -138,6 +167,31 @@ export default function ChatPage() {
         </form>
       </footer>
     </div>
+  );
+}
+
+function BusinessPill({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+        active
+          ? "bg-ink text-paper dark:bg-paper dark:text-ink"
+          : "bg-haze text-iron border border-iron/20 hover:text-ink",
+      )}
+    >
+      {label}
+    </button>
   );
 }
 

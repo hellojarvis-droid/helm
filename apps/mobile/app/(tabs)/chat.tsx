@@ -14,7 +14,13 @@ import {
 } from "react-native";
 import { MicButton } from "@/components/MicButton";
 import { PausedBanner } from "@/components/PausedBanner";
-import { respondToApproval, streamChatTurn, type ChatEvent } from "@/lib/api";
+import {
+  listBusinesses,
+  respondToApproval,
+  streamChatTurn,
+  type Business,
+  type ChatEvent,
+} from "@/lib/api";
 import { colors } from "@/lib/colors";
 
 type ApprovalPart = {
@@ -42,7 +48,18 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [micAvailable, setMicAvailable] = useState(true);
+  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [scopedBizId, setScopedBizId] = useState<string | undefined>(undefined);
   const listRef = useRef<FlatList<TurnPart>>(null);
+
+  useEffect(() => {
+    listBusinesses()
+      .then(setBusinesses)
+      .catch(() => {
+        // Silent — picker is optional. Without the list, chat falls back
+        // to unscoped CEO conversation.
+      });
+  }, []);
 
   useEffect(() => {
     // Auto-scroll on every append so the newest part is always visible.
@@ -64,7 +81,7 @@ export default function ChatScreen() {
     let costCents = 0;
 
     try {
-      for await (const ev of streamChatTurn(text)) {
+      for await (const ev of streamChatTurn(text, scopedBizId)) {
         if (ev.kind === "text_delta") {
           acc += ev.text;
           setPending(acc);
@@ -166,6 +183,24 @@ export default function ChatScreen() {
         }
         ListFooterComponent={pending ? <PendingText text={pending} /> : null}
       />
+
+      {businesses.length > 0 ? (
+        <View style={styles.scopeRow}>
+          <BusinessPill
+            label="All"
+            active={scopedBizId === undefined}
+            onPress={() => setScopedBizId(undefined)}
+          />
+          {businesses.map((b) => (
+            <BusinessPill
+              key={b.id}
+              label={b.name}
+              active={scopedBizId === b.id}
+              onPress={() => setScopedBizId(b.id)}
+            />
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.composer}>
         <TextInput
@@ -349,6 +384,24 @@ function ApprovalCardInline({
   );
 }
 
+function BusinessPill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={[styles.scopePill, active && styles.scopePillActive]}>
+      <Text style={[styles.scopePillText, active && styles.scopePillTextActive]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function PendingText({ text }: { text: string }) {
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -400,6 +453,29 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }),
     marginTop: 4,
   },
+  scopeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 6,
+    backgroundColor: colors.paper,
+  },
+  scopePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: colors.haze,
+    borderWidth: 1,
+    borderColor: "rgba(107,107,107,0.2)",
+  },
+  scopePillActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  scopePillText: { color: colors.iron, fontSize: 12, fontWeight: "500" },
+  scopePillTextActive: { color: colors.paper },
   composer: {
     flexDirection: "row",
     gap: 8,
