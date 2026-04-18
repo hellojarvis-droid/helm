@@ -12,9 +12,28 @@ export default function TodayPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getToday()
-      .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    let cancelled = false;
+    function refresh() {
+      getToday()
+        .then((d) => {
+          if (!cancelled) setData(d);
+        })
+        .catch((e) => {
+          if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        });
+    }
+    refresh();
+    // Auto-refresh every 60s + when the tab regains focus.
+    const interval = setInterval(refresh, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   return (

@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -30,6 +31,16 @@ export default function TodayScreen() {
 
   useEffect(() => {
     void load();
+    // Auto-refresh every 60s in foreground + immediately on app foreground.
+    // Catches push-driven approvals + spend events without manual pull.
+    const interval = setInterval(load, 60_000);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void load();
+    });
+    return () => {
+      clearInterval(interval);
+      sub.remove();
+    };
   }, [load]);
 
   async function onRefresh() {
