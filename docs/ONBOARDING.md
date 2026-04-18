@@ -194,6 +194,13 @@ eas secret:create --scope project --name EXPO_PUBLIC_POSTHOG_KEY --value phc_…
   concurrent users, 1000 chat turns/hour.
 - [ ] **Penetration test** — third-party. Cure53, NCC Group, or boutique.
   $5k–$15k for a 5-day engagement on this surface.
+- [ ] **Static security scanning** — CodeQL needs GitHub Advanced Security
+  ($49/active-committer/mo) to upload SARIF on private repos, so we don't
+  ship a `.github/workflows/codeql.yml` by default. When you enable GHAS
+  (Settings → Code security and analysis), commit the standard CodeQL
+  workflow and it'll just work. Free alternative for now: Trivy filesystem
+  scan in CI (`trivy fs --severity HIGH,CRITICAL .`) — catches CVEs in
+  pinned deps but not custom code paths.
 - [ ] **Lawyer-reviewed Terms + Privacy** — the placeholder /terms and
   /privacy pages need replacement before paid signups. Local DTC ecommerce
   + AI agents is a nuanced area — find a lawyer who knows both.
