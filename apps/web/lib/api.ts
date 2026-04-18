@@ -94,6 +94,7 @@ export interface Business {
   vertical: string;
   status: string;
   weekly_spend_cap_cents: number;
+  per_auth_cap_cents: number;
   stripe_onboarding_complete?: boolean;
   created_at: string;
 }

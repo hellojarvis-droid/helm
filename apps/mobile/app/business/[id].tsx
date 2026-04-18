@@ -169,6 +169,7 @@ export default function BusinessDetailScreen() {
           description="Stripe Connect + Issuing per business. Weekly cap enforced."
         >
           <KV k="Weekly cap" v={`$${(biz.weekly_spend_cap_cents / 100).toFixed(0)}`} />
+          <KV k="Per-auth cap" v={`$${(biz.per_auth_cap_cents / 100).toFixed(0)}`} />
           <KV k="Stripe account" v={biz.stripe_account_id ?? "not connected"} />
           <KV k="Issuing card" v={biz.stripe_card_id ?? "not provisioned"} />
           <Pressable

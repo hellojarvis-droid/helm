@@ -17,9 +17,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.auth import CurrentUser, require_user
+from helm.config import get_settings
 from helm.db.models import AgentEvent, Business
 from helm.db.session import get_session
 from helm.db.tenant import get_business_for_user, list_businesses_for_user
+from helm.services import stripe_client
 from helm.services.user_sync import sync_user_from_supabase
 
 router = APIRouter(prefix="/businesses", tags=["businesses"])
@@ -51,12 +53,14 @@ class BusinessResponse(BaseModel):
     stripe_card_id: str | None
     shopify_shop_domain: str | None
     weekly_spend_cap_cents: int
+    per_auth_cap_cents: int
     brand_kit: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+    stripe_sync: dict[str, Any] | None = None
 
     @classmethod
-    def from_row(cls, row: Business) -> BusinessResponse:
+    def from_row(cls, row: Business, stripe_sync: dict[str, Any] | None = None) -> BusinessResponse:
         return cls(
             id=row.id,
             name=row.name,
@@ -66,10 +70,17 @@ class BusinessResponse(BaseModel):
             stripe_card_id=row.stripe_card_id,
             shopify_shop_domain=row.shopify_shop_domain,
             weekly_spend_cap_cents=row.weekly_spend_cap_cents,
+            per_auth_cap_cents=row.per_auth_cap_cents,
             brand_kit=row.brand_kit,
             created_at=row.created_at,
             updated_at=row.updated_at,
+            stripe_sync=stripe_sync,
         )
+
+
+class UpdateBusinessRequest(BaseModel):
+    weekly_spend_cap_cents: Annotated[int, Field(ge=0, le=10_000_000)] | None = None
+    per_auth_cap_cents: Annotated[int, Field(ge=0, le=10_000_000)] | None = None
 
 
 @router.post("", response_model=BusinessResponse, status_code=201)
@@ -116,6 +127,53 @@ async def get_business(
         # Fail closed — don't leak "exists but not yours" vs "doesn't exist".
         raise HTTPException(status_code=404, detail="business not found")
     return BusinessResponse.from_row(biz)
+
+
+@router.patch("/{business_id}", response_model=BusinessResponse)
+async def update_business(
+    business_id: uuid.UUID,
+    body: UpdateBusinessRequest,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_session),
+) -> BusinessResponse:
+    """Update a business's spending caps. Pushes the new limits to Stripe's
+    card-level spending_controls when Issuing is enabled AND the card exists,
+    so Stripe's own enforcement stays in lockstep with our DB.
+    """
+    user_row = await sync_user_from_supabase(db, user)
+    biz = await get_business_for_user(db, user_row.id, business_id)
+    if biz is None:
+        raise HTTPException(status_code=404, detail="business not found")
+
+    changed = False
+    if body.weekly_spend_cap_cents is not None:
+        biz.weekly_spend_cap_cents = body.weekly_spend_cap_cents
+        changed = True
+    if body.per_auth_cap_cents is not None:
+        biz.per_auth_cap_cents = body.per_auth_cap_cents
+        changed = True
+    if not changed:
+        return BusinessResponse.from_row(biz)
+
+    stripe_sync: dict[str, Any] = {"attempted": False}
+    settings = get_settings()
+    if settings.stripe_issuing_enabled and biz.stripe_card_id and biz.stripe_account_id:
+        stripe_sync["attempted"] = True
+        try:
+            await stripe_client.update_issuing_caps(
+                account_id=biz.stripe_account_id,
+                card_id=biz.stripe_card_id,
+                weekly_spend_cap_cents=biz.weekly_spend_cap_cents,
+                per_auth_cap_cents=biz.per_auth_cap_cents,
+            )
+            stripe_sync["synced"] = True
+        except Exception as e:  # surface sync failure to client
+            stripe_sync["synced"] = False
+            stripe_sync["error"] = str(e)[:200]
+
+    await db.commit()
+    await db.refresh(biz)
+    return BusinessResponse.from_row(biz, stripe_sync=stripe_sync)
 
 
 class EventResponse(BaseModel):

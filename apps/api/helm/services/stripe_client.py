@@ -218,20 +218,54 @@ async def update_issuing_weekly_cap(
     transaction will still decline. Called from the approval "raise cap" flow
     and any manual cap change.
     """
+    await _update_spending_limits(
+        account_id=account_id,
+        card_id=card_id,
+        weekly_cents=weekly_spend_cap_cents,
+        per_auth_cents=None,
+    )
+
+
+async def update_issuing_caps(
+    account_id: str,
+    card_id: str,
+    weekly_spend_cap_cents: int,
+    per_auth_cap_cents: int,
+) -> None:
+    """Push both the weekly and per-authorization caps onto the Issuing card.
+
+    Stripe takes a single spending_limits list — we rebuild it with both
+    intervals every time so the card's view stays a mirror of the business row.
+    """
+    await _update_spending_limits(
+        account_id=account_id,
+        card_id=card_id,
+        weekly_cents=weekly_spend_cap_cents,
+        per_auth_cents=per_auth_cap_cents,
+    )
+
+
+async def _update_spending_limits(
+    *,
+    account_id: str,
+    card_id: str,
+    weekly_cents: int,
+    per_auth_cents: int | None,
+) -> None:
     settings = get_settings()
     if not settings.stripe_issuing_enabled:
         raise RuntimeError("Issuing not yet enabled")
     s = _configured_stripe()
 
+    limits: list[dict[str, Any]] = [{"amount": weekly_cents, "interval": "weekly"}]
+    if per_auth_cents is not None:
+        limits.append({"amount": per_auth_cents, "interval": "per_authorization"})
+
     def _update() -> None:
         s.issuing.Card.modify(
             card_id,
             stripe_account=account_id,
-            spending_controls={
-                "spending_limits": [
-                    {"amount": weekly_spend_cap_cents, "interval": "weekly"},
-                ],
-            },
+            spending_controls={"spending_limits": limits},
         )
 
     await _in_thread(_update)

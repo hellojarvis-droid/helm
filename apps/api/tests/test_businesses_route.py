@@ -63,6 +63,65 @@ async def test_create_list_get_business(session) -> None:
 
 @requires_db
 @pytest.mark.asyncio
+async def test_patch_business_updates_caps_and_syncs_stripe(session, monkeypatch) -> None:
+    from helm import config
+    from helm.db.models import Business, User
+    from helm.services import stripe_client as stripe_module
+
+    user = User(supabase_id="sub-patch", email="patch@example.com", tier="founder")
+    session.add(user)
+    await session.flush()
+    biz = Business(
+        user_id=user.id,
+        name="Candle Co",
+        vertical="dtc_physical",
+        status="active",
+        weekly_spend_cap_cents=10_000,
+        per_auth_cap_cents=5_000,
+        stripe_account_id="acct_test",
+        stripe_card_id="ic_test",
+    )
+    session.add(biz)
+    await session.commit()
+    biz_id = biz.id
+
+    calls: list[dict[str, object]] = []
+
+    async def _fake_update(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(stripe_module, "update_issuing_caps", _fake_update)
+    monkeypatch.setenv("STRIPE_ISSUING_ENABLED", "true")
+    config.get_settings.cache_clear()
+
+    fake_user = CurrentUser(supabase_id="sub-patch", email="patch@example.com", raw_claims={})
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: fake_user
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.patch(
+            f"/businesses/{biz_id}",
+            json={"weekly_spend_cap_cents": 75_000, "per_auth_cap_cents": 20_000},
+            headers={"Authorization": "Bearer stub"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["weekly_spend_cap_cents"] == 75_000
+        assert body["per_auth_cap_cents"] == 20_000
+        assert body["stripe_sync"]["synced"] is True
+
+    assert len(calls) == 1
+    assert calls[0]["account_id"] == "acct_test"
+    assert calls[0]["card_id"] == "ic_test"
+    assert calls[0]["weekly_spend_cap_cents"] == 75_000
+    assert calls[0]["per_auth_cap_cents"] == 20_000
+
+    config.get_settings.cache_clear()
+
+
+@requires_db
+@pytest.mark.asyncio
 async def test_business_isolation_between_users(session) -> None:
     user_a = User(supabase_id="sub-biz-a", email="a@example.com", tier="founder")
     user_b = User(supabase_id="sub-biz-b", email="b@example.com", tier="founder")

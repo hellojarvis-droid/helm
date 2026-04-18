@@ -67,11 +67,15 @@ async def decide_authorization(
     amount_cents: int,
     merchant_category: str | None,
     merchant_name: str | None = None,
-    per_auth_cap_cents: int = 50000,
+    per_auth_cap_cents: int | None = None,
     mcc_allowlist: frozenset[str] = _DEFAULT_MCC_ALLOWLIST,
 ) -> AuthorizationDecision:
     """Decide a single Stripe authorization. All business lookups by
-    stripe_account_id. Writes an audit event before returning."""
+    stripe_account_id. Writes an audit event before returning.
+
+    `per_auth_cap_cents` is optional: when omitted we read the business's
+    own cap column. Callers in tests can still inject a hardcoded value.
+    """
     # 1. Find the business.
     biz_row = await db.execute(
         select(Business).where(Business.stripe_account_id == stripe_account_id)
@@ -125,11 +129,14 @@ async def decide_authorization(
         )
 
     # 5. Per-auth cap.
-    if amount_cents > per_auth_cap_cents:
+    effective_per_auth_cap = (
+        per_auth_cap_cents if per_auth_cap_cents is not None else biz.per_auth_cap_cents
+    )
+    if amount_cents > effective_per_auth_cap:
         return await _log_and_return(
             db,
             approved=False,
-            reason=f"per_auth_cap_exceeded:{amount_cents}>{per_auth_cap_cents}",
+            reason=f"per_auth_cap_exceeded:{amount_cents}>{effective_per_auth_cap}",
             business_id=biz.id,
             amount_cents=amount_cents,
             merchant_category=merchant_category,

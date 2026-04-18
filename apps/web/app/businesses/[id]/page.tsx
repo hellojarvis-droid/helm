@@ -103,6 +103,10 @@ export default function BusinessDetailPage({ params }: PageProps) {
               <dd className="tabular">${(biz.weekly_spend_cap_cents / 100).toFixed(0)}</dd>
             </div>
             <div className="flex justify-between">
+              <dt className="text-iron">Per-authorization cap</dt>
+              <dd className="tabular">${(biz.per_auth_cap_cents / 100).toFixed(0)}</dd>
+            </div>
+            <div className="flex justify-between">
               <dt className="text-iron">Stripe account</dt>
               <dd className="tabular">{biz.stripe_account_id ?? "not connected"}</dd>
             </div>
