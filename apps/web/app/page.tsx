@@ -243,6 +243,9 @@ function Footer() {
     <footer className="max-w-6xl mx-auto px-6 py-10 text-xs text-iron flex items-center justify-between border-t border-iron/10">
       <div>Helm · 2026</div>
       <div className="flex gap-4">
+        <Link href={{ pathname: "/pricing" }} className="hover:text-ink">
+          Pricing
+        </Link>
         <a href="mailto:hello@helm.app" className="hover:text-ink">
           Contact
         </a>
