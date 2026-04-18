@@ -87,6 +87,36 @@ async def _user_owns_approval(db: AsyncSession, user_id: uuid.UUID, approval: Ap
     return biz is not None and biz.user_id == user_id
 
 
+async def _expire_lazily(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Flip every pending approval on this user's businesses that's past its
+    expires_at to status='expired'. Lazy sweep — we have no scheduler today,
+    so read paths trigger cleanup. Returns the number of rows flipped.
+    """
+    from sqlalchemy import update
+
+    now = datetime.now(UTC)
+    # Find the ids first so we can count + short-circuit without a commit.
+    stale_ids_q = await db.execute(
+        select(Approval.id)
+        .join(Business, Business.id == Approval.business_id)
+        .where(
+            Business.user_id == user_id,
+            Approval.status == "pending",
+            Approval.expires_at < now,
+        )
+    )
+    stale_ids = list(stale_ids_q.scalars().all())
+    if not stale_ids:
+        return 0
+    await db.execute(
+        update(Approval)
+        .where(Approval.id.in_(stale_ids))
+        .values(status="expired", responded_at=now)
+    )
+    await db.commit()
+    return len(stale_ids)
+
+
 @router.get("", response_model=list[ApprovalResponse])
 async def list_approvals(
     status: str | None = None,
@@ -94,6 +124,8 @@ async def list_approvals(
     db: AsyncSession = Depends(get_session),
 ) -> list[ApprovalResponse]:
     user_row = await sync_user_from_supabase(db, user)
+    await _expire_lazily(db, user_row.id)
+
     stmt = (
         select(Approval)
         .join(Business, Business.id == Approval.business_id)
@@ -113,6 +145,8 @@ async def get_approval(
     db: AsyncSession = Depends(get_session),
 ) -> ApprovalResponse:
     user_row = await sync_user_from_supabase(db, user)
+    await _expire_lazily(db, user_row.id)
+
     res = await db.execute(select(Approval).where(Approval.id == approval_id))
     row = res.scalar_one_or_none()
     if row is None or not await _user_owns_approval(db, user_row.id, row):

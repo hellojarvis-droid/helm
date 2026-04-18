@@ -266,6 +266,61 @@ async def test_cap_raise_syncs_to_stripe_when_card_exists(session, monkeypatch) 
 
 @requires_db
 @pytest.mark.asyncio
+async def test_pending_past_expiry_flips_to_expired_on_list(session) -> None:
+    """A pending approval whose expires_at has passed auto-expires on the
+    next list read. No scheduler needed — read paths drive the sweep."""
+    user = User(supabase_id="sub-exp", email="exp@example.com", tier="founder")
+    session.add(user)
+    await session.flush()
+    biz = Business(user_id=user.id, name="Candle", vertical="dtc_physical")
+    session.add(biz)
+    await session.flush()
+    # Two pending approvals: one already expired, one fresh.
+    stale = Approval(
+        business_id=biz.id,
+        kind="spend",
+        summary="Stale $20 spend",
+        details={},
+        status="pending",
+        expires_at=datetime.now(UTC) - timedelta(hours=1),
+    )
+    fresh = Approval(
+        business_id=biz.id,
+        kind="spend",
+        summary="Fresh $30 spend",
+        details={},
+        status="pending",
+        expires_at=datetime.now(UTC) + timedelta(hours=24),
+    )
+    session.add_all([stale, fresh])
+    await session.commit()
+
+    fake = CurrentUser(supabase_id=user.supabase_id, email=user.email, raw_claims={})
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: fake
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get("/approvals", headers={"Authorization": "Bearer stub"})
+        assert r.status_code == 200
+        by_id = {row["id"]: row for row in r.json()}
+        assert by_id[str(stale.id)]["status"] == "expired"
+        assert by_id[str(fresh.id)]["status"] == "pending"
+
+        # Filtering to pending must NOT return the now-expired one.
+        r = await client.get(
+            "/approvals",
+            params={"status": "pending"},
+            headers={"Authorization": "Bearer stub"},
+        )
+        assert r.status_code == 200
+        ids = {row["id"] for row in r.json()}
+        assert str(fresh.id) in ids
+        assert str(stale.id) not in ids
+
+
+@requires_db
+@pytest.mark.asyncio
 async def test_approval_denied_locks_out_retry(session) -> None:
     user, _, approval = await _seed_user_with_pending_approval(session)
 
