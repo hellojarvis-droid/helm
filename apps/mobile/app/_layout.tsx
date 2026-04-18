@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
+import { PostHogProvider } from "@/components/PostHogProvider";
 import { colors } from "@/lib/colors";
 import { supabase } from "@/lib/supabase";
 
@@ -23,7 +24,7 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <>
+    <PostHogProvider>
       <StatusBar style="auto" />
       <Stack
         screenOptions={{
@@ -36,6 +37,6 @@ export default function RootLayout() {
         <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         <Stack.Screen name="business/[id]" options={{ headerBackTitle: "Back" }} />
       </Stack>
-    </>
+    </PostHogProvider>
   );
 }
