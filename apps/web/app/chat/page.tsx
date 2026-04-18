@@ -9,7 +9,7 @@ import { apiFetch, type Business, listBusinesses, streamChat, type ChatEvent } f
 
 type TurnPart =
   | { kind: "user"; text: string }
-  | { kind: "agent"; text: string }
+  | { kind: "agent"; text: string; toolCalls: string[]; costCents: number }
   | { kind: "tool"; name: string; ok: boolean }
   | { kind: "approval"; event: Extract<ChatEvent, { kind: "approval_requested" }> };
 
@@ -45,19 +45,24 @@ export default function ChatPage() {
     abortRef.current = controller;
 
     let acc = "";
+    let toolCalls: string[] = [];
+    let costCents = 0;
     try {
       for await (const ev of streamChat(text, scopedBizId, controller.signal)) {
         if (ev.kind === "text_delta") {
           acc += ev.text;
           setPending(acc);
         } else if (ev.kind === "tool_call") {
+          toolCalls = [...toolCalls, ev.name];
           setParts((p) => [...p, { kind: "tool", name: ev.name, ok: true }]);
         } else if (ev.kind === "tool_result") {
           setParts((p) => [...p, { kind: "tool", name: ev.name, ok: !ev.is_error }]);
         } else if (ev.kind === "approval_requested") {
           setParts((p) => [...p, { kind: "approval", event: ev }]);
+        } else if (ev.kind === "turn_cost") {
+          costCents = ev.cost_cents;
         } else if (ev.kind === "done") {
-          if (acc) setParts((p) => [...p, { kind: "agent", text: acc }]);
+          if (acc) setParts((p) => [...p, { kind: "agent", text: acc, toolCalls, costCents }]);
           setPending("");
         } else if (ev.kind === "error") {
           setError(`${ev.reason}${ev.detail ? `: ${ev.detail}` : ""}`);
@@ -216,7 +221,17 @@ function TurnPartView({
     );
   }
   if (part.kind === "agent") {
-    return <div className="text-sm leading-relaxed whitespace-pre-wrap max-w-2xl">{part.text}</div>;
+    return (
+      <div className="max-w-2xl">
+        <div className="text-sm leading-relaxed whitespace-pre-wrap">{part.text}</div>
+        {part.toolCalls.length || part.costCents > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-3 text-xs text-iron font-mono">
+            {part.toolCalls.length ? <span>tools: {part.toolCalls.join(", ")}</span> : null}
+            {part.costCents > 0 ? <span>cost: {part.costCents}¢</span> : null}
+          </div>
+        ) : null}
+      </div>
+    );
   }
   if (part.kind === "tool") {
     const color = part.ok ? "text-iron" : "text-danger";
