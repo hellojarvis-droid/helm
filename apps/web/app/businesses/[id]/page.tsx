@@ -3,20 +3,16 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { EditCapsModal } from "@/components/EditCapsModal";
 import { Nav } from "@/components/Nav";
 import { SpendCard } from "@/components/SpendCard";
 import { Button } from "@/components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
-import { type Business, getBusiness, startStripeOnboarding } from "@/lib/api";
+import { type BusinessDetail, getBusiness, startStripeOnboarding } from "@/lib/api";
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
-
-type BusinessDetail = Business & {
-  stripe_account_id: string | null;
-  brand_kit: Record<string, unknown>;
-};
 
 export default function BusinessDetailPage({ params }: PageProps) {
   const { id } = use(params);
@@ -24,6 +20,7 @@ export default function BusinessDetailPage({ params }: PageProps) {
   const [biz, setBiz] = useState<BusinessDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onboarding, setOnboarding] = useState(false);
+  const [editCapsOpen, setEditCapsOpen] = useState(false);
 
   useEffect(() => {
     getBusiness(id)
@@ -111,13 +108,23 @@ export default function BusinessDetailPage({ params }: PageProps) {
               <dd className="tabular">{biz.stripe_account_id ?? "not connected"}</dd>
             </div>
           </dl>
-          <div className="mt-4">
+          {biz.stripe_sync?.attempted && biz.stripe_sync.synced === false ? (
+            <p className="text-sm text-danger mt-3">
+              Stripe sync failed: {biz.stripe_sync.error ?? "unknown error"}. Caps updated in our DB
+              but Stripe&apos;s card-level limit may still decline real transactions. Try saving
+              again.
+            </p>
+          ) : null}
+          <div className="mt-4 flex gap-2">
             <Button variant="accent" onClick={connectStripe} disabled={onboarding}>
               {onboarding
                 ? "Opening Stripe…"
                 : biz.stripe_account_id
                   ? "Resume Stripe onboarding"
                   : "Connect Stripe"}
+            </Button>
+            <Button variant="outline" onClick={() => setEditCapsOpen(true)}>
+              Edit caps
             </Button>
             {error && <p className="text-sm text-danger mt-3">{error}</p>}
           </div>
@@ -161,6 +168,19 @@ export default function BusinessDetailPage({ params }: PageProps) {
           ← All businesses
         </Link>
       </main>
+
+      {editCapsOpen && biz ? (
+        <EditCapsModal
+          business={biz}
+          onClose={() => setEditCapsOpen(false)}
+          onSaved={(updated) => {
+            setBiz(updated);
+            if (!updated.stripe_sync?.attempted || updated.stripe_sync?.synced) {
+              setEditCapsOpen(false);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

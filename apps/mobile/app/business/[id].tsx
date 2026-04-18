@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { EditCapsSheet } from "@/components/EditCapsSheet";
 import { SpendCard } from "@/components/SpendCard";
 import {
   connectToolkit,
@@ -46,6 +47,7 @@ export default function BusinessDetailScreen() {
   const [onboarding, setOnboarding] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [connectingSlug, setConnectingSlug] = useState<string | null>(null);
+  const [capsOpen, setCapsOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -172,6 +174,12 @@ export default function BusinessDetailScreen() {
           <KV k="Per-auth cap" v={`$${(biz.per_auth_cap_cents / 100).toFixed(0)}`} />
           <KV k="Stripe account" v={biz.stripe_account_id ?? "not connected"} />
           <KV k="Issuing card" v={biz.stripe_card_id ?? "not provisioned"} />
+          {biz.stripe_sync?.attempted && biz.stripe_sync.synced === false ? (
+            <Text style={styles.syncWarning}>
+              Stripe sync failed: {biz.stripe_sync.error ?? "unknown error"}. DB cap updated; the
+              card may still decline real transactions. Retry by saving again.
+            </Text>
+          ) : null}
           <Pressable
             style={[styles.primary, onboarding && { opacity: 0.6 }]}
             onPress={onConnectStripe}
@@ -184,6 +192,9 @@ export default function BusinessDetailScreen() {
                 {biz.stripe_account_id ? "Resume Stripe onboarding" : "Connect Stripe"}
               </Text>
             )}
+          </Pressable>
+          <Pressable style={styles.secondary} onPress={() => setCapsOpen(true)}>
+            <Text style={styles.secondaryText}>Edit caps</Text>
           </Pressable>
         </Card>
 
@@ -244,6 +255,17 @@ export default function BusinessDetailScreen() {
         connecting={connectingSlug}
         onClose={() => setPickerOpen(false)}
         onPick={onConnectToolkit}
+      />
+
+      <EditCapsSheet
+        open={capsOpen}
+        business={biz}
+        onClose={() => setCapsOpen(false)}
+        onSaved={(updated) => {
+          setBiz(updated);
+          const syncOk = !updated.stripe_sync?.attempted || updated.stripe_sync?.synced === true;
+          if (syncOk) setCapsOpen(false);
+        }}
       />
     </View>
   );
@@ -387,6 +409,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: colors.paper, fontSize: 14, fontWeight: "500" },
+
+  syncWarning: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
+  },
 
   secondary: {
     marginTop: 12,

@@ -179,11 +179,29 @@ export type BusinessDetail = Business & {
   stripe_account_id: string | null;
   stripe_card_id: string | null;
   brand_kit: Record<string, unknown>;
+  stripe_sync?: {
+    attempted: boolean;
+    synced?: boolean;
+    error?: string;
+  } | null;
 };
 
 export async function getBusiness(id: string): Promise<BusinessDetail> {
   const res = await apiFetch(`/businesses/${id}`);
   if (!res.ok) throw new Error(`getBusiness ${res.status}`);
+  return res.json();
+}
+
+export async function updateBusiness(
+  id: string,
+  body: { weekly_spend_cap_cents?: number; per_auth_cap_cents?: number },
+): Promise<BusinessDetail> {
+  const res = await apiFetch(`/businesses/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`updateBusiness ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
