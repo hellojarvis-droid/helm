@@ -117,9 +117,7 @@ export default function ChatPage() {
 
       <main className="flex-1 max-w-3xl w-full mx-auto px-6 py-6 flex flex-col gap-4 overflow-y-auto">
         {parts.length === 0 && !pending && (
-          <div className="text-iron text-sm mt-16 text-center">
-            Start a conversation. The CEO Agent is listening.
-          </div>
+          <EmptyChat onPick={(prompt) => setInput(prompt)} hasBusinesses={businesses.length > 0} />
         )}
         {parts.map((part, i) => (
           <TurnPartView key={i} part={part} onApproval={respond} />
@@ -171,6 +169,53 @@ export default function ChatPage() {
           </Button>
         </form>
       </footer>
+    </div>
+  );
+}
+
+const STARTER_PROMPTS_NEW = [
+  "Find me a proven candle business idea I could launch this week.",
+  "What are you good for? Walk me through what you can do.",
+  "I want to spin up a SaaS — start with the idea, then the brand.",
+];
+const STARTER_PROMPTS_RETURNING = [
+  "How are my businesses doing this week?",
+  "Find a fresh growth opportunity for my best-performing business.",
+  "Run a Sunday review — give me wins, watches, and three recommendations.",
+];
+
+function EmptyChat({
+  onPick,
+  hasBusinesses,
+}: {
+  onPick: (prompt: string) => void;
+  hasBusinesses: boolean;
+}) {
+  const prompts = hasBusinesses ? STARTER_PROMPTS_RETURNING : STARTER_PROMPTS_NEW;
+  return (
+    <div className="mt-16 space-y-6">
+      <div className="text-center">
+        <div className="text-xs font-semibold tracking-widest text-iron uppercase mb-2">
+          {hasBusinesses ? "Where to next" : "Welcome to Helm"}
+        </div>
+        <p className="text-sm text-iron">
+          {hasBusinesses
+            ? "Ask the CEO Agent anything — or pick a starter."
+            : "Tell the CEO Agent what you want to build. It delegates to the right specialist."}
+        </p>
+      </div>
+      <div className="grid gap-2 max-w-xl mx-auto">
+        {prompts.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onPick(p)}
+            className="text-left p-4 rounded-lg border border-iron/20 bg-haze/40 dark:bg-ink/20 hover:border-accent/60 transition-colors"
+          >
+            <span className="text-sm">{p}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

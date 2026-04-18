@@ -178,7 +178,7 @@ export default function ChatScreen() {
         renderItem={({ item }) => <PartView part={item} onRespond={respond} />}
         ListEmptyComponent={
           !pending ? (
-            <Text style={styles.empty}>Start a conversation. The CEO Agent is listening.</Text>
+            <EmptyChat onPick={(p) => setInput(p)} hasBusinesses={businesses.length > 0} />
           ) : null
         }
         ListFooterComponent={pending ? <PendingText text={pending} /> : null}
@@ -384,6 +384,46 @@ function ApprovalCardInline({
   );
 }
 
+const STARTER_PROMPTS_NEW = [
+  "Find me a proven candle business idea I could launch this week.",
+  "What are you good for? Walk me through what you can do.",
+  "I want to spin up a SaaS — start with the idea, then the brand.",
+];
+const STARTER_PROMPTS_RETURNING = [
+  "How are my businesses doing this week?",
+  "Find a fresh growth opportunity for my best-performing business.",
+  "Run a Sunday review — wins, watches, three recommendations.",
+];
+
+function EmptyChat({
+  onPick,
+  hasBusinesses,
+}: {
+  onPick: (prompt: string) => void;
+  hasBusinesses: boolean;
+}) {
+  const prompts = hasBusinesses ? STARTER_PROMPTS_RETURNING : STARTER_PROMPTS_NEW;
+  return (
+    <View style={styles.emptyChat}>
+      <Text style={styles.emptyChatEyebrow}>
+        {hasBusinesses ? "Where to next" : "Welcome to Helm"}
+      </Text>
+      <Text style={styles.emptyChatBody}>
+        {hasBusinesses
+          ? "Ask the CEO Agent anything — or pick a starter."
+          : "Tell the CEO Agent what you want to build. It delegates to the right specialist."}
+      </Text>
+      <View style={{ gap: 8, marginTop: 16 }}>
+        {prompts.map((p) => (
+          <Pressable key={p} style={styles.starterCard} onPress={() => onPick(p)}>
+            <Text style={styles.starterText}>{p}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function BusinessPill({
   label,
   active,
@@ -428,6 +468,30 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   list: { padding: 16, gap: 8 },
   empty: { textAlign: "center", marginTop: 80, color: colors.iron, fontSize: 14 },
+  emptyChat: { paddingHorizontal: 16, paddingTop: 60 },
+  emptyChatEyebrow: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 1,
+    color: colors.iron,
+    textTransform: "uppercase",
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  emptyChatBody: {
+    fontSize: 13,
+    color: colors.iron,
+    textAlign: "center",
+    lineHeight: 19,
+  },
+  starterCard: {
+    backgroundColor: colors.haze,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(107,107,107,0.2)",
+  },
+  starterText: { fontSize: 14, color: colors.ink, lineHeight: 19 },
   userRow: { alignItems: "flex-end", marginBottom: 8 },
   userBubble: {
     backgroundColor: colors.ink,
