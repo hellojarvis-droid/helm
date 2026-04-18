@@ -354,6 +354,7 @@ async def _request_user_approval(ctx: ToolContext, args: dict[str, Any]) -> dict
                 "approval_id": str(row.id),
                 "approval_kind": row.kind,
                 "summary": row.summary,
+                "details": row.details,
                 "business_id": str(biz_id),
                 "expires_at": row.expires_at.isoformat(),
             },

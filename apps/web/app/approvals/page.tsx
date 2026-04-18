@@ -111,27 +111,62 @@ function ApprovalRow({
   });
 
   const pending = approval.status === "pending";
+  const isSpend =
+    approval.kind === "spend" &&
+    typeof approval.details?.amount_cents === "number" &&
+    (approval.details.amount_cents as number) > 0;
   const borderClass = pending
-    ? "border-accent/40 bg-accent/5"
+    ? isSpend
+      ? "border-accent border-2 bg-accent/5"
+      : "border-accent/40 bg-accent/5"
     : "border-iron/20 bg-haze/40 dark:bg-ink/40";
+
+  const amountCents = isSpend ? (approval.details.amount_cents as number) : 0;
+  const merchant =
+    typeof approval.details?.merchant_hint === "string"
+      ? (approval.details.merchant_hint as string)
+      : "";
+  const purpose =
+    typeof approval.details?.purpose === "string" ? (approval.details.purpose as string) : "";
 
   return (
     <div className={cn("rounded-lg border p-5", borderClass)}>
       <div className="flex items-start justify-between mb-2">
         <div className="text-xs uppercase tracking-wider font-semibold">
-          {approval.kind} · <span className="text-iron">{approval.status}</span>
+          {isSpend ? "Spend approval" : approval.kind} ·{" "}
+          <span className="text-iron">{approval.status}</span>
         </div>
         <div className="text-xs text-iron text-right">
           <div>requested {requested}</div>
           {pending && <div>expires {expires}</div>}
         </div>
       </div>
-      <p className="text-sm leading-relaxed mb-4">{approval.summary}</p>
+
+      {isSpend ? (
+        <>
+          <div className="flex items-baseline gap-3 mb-3">
+            <span className="text-4xl font-semibold tabular">
+              ${(amountCents / 100).toFixed(2)}
+            </span>
+            {merchant ? <span className="text-sm text-iron">to {merchant}</span> : null}
+          </div>
+          {purpose ? (
+            <div className="text-sm leading-relaxed mb-2">
+              <span className="text-iron">Why: </span>
+              {purpose}
+            </div>
+          ) : null}
+          <p className="text-xs text-iron leading-relaxed mb-4">{approval.summary}</p>
+        </>
+      ) : (
+        <p className="text-sm leading-relaxed mb-4">{approval.summary}</p>
+      )}
+
       {pending && (
         <div className="flex gap-2">
           <Button
             variant="accent"
-            size="sm"
+            size={isSpend ? "md" : "sm"}
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -139,11 +174,11 @@ function ApprovalRow({
               setBusy(false);
             }}
           >
-            Approve
+            {isSpend ? `Approve $${(amountCents / 100).toFixed(0)}` : "Approve"}
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            size={isSpend ? "md" : "sm"}
             disabled={busy}
             onClick={async () => {
               setBusy(true);

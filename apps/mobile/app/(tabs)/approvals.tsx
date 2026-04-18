@@ -101,16 +101,44 @@ function Card({
   onRespond: (id: string, status: "approved" | "denied") => void;
 }) {
   const pending = approval.status === "pending";
+  const d = approval.details ?? {};
+  const isSpend =
+    approval.kind === "spend" &&
+    typeof d.amount_cents === "number" &&
+    (d.amount_cents as number) > 0;
+  const amountCents = isSpend ? (d.amount_cents as number) : 0;
+  const merchant = typeof d.merchant_hint === "string" ? (d.merchant_hint as string) : "";
+  const purpose = typeof d.purpose === "string" ? (d.purpose as string) : "";
+
   return (
-    <View style={[styles.card, pending && styles.cardPending]}>
+    <View style={[styles.card, pending && styles.cardPending, isSpend && styles.cardSpend]}>
       <Text style={styles.kind}>
-        {approval.kind} · <Text style={{ color: colors.iron }}>{approval.status}</Text>
+        {isSpend ? "Spend approval" : approval.kind} ·{" "}
+        <Text style={{ color: colors.iron }}>{approval.status}</Text>
       </Text>
-      <Text style={styles.summary}>{approval.summary}</Text>
+      {isSpend ? (
+        <>
+          <View style={styles.spendAmountRow}>
+            <Text style={styles.spendAmount}>${(amountCents / 100).toFixed(2)}</Text>
+            {merchant ? <Text style={styles.spendMerchant}>to {merchant}</Text> : null}
+          </View>
+          {purpose ? (
+            <Text style={styles.spendPurpose}>
+              <Text style={{ color: colors.iron }}>Why: </Text>
+              {purpose}
+            </Text>
+          ) : null}
+          <Text style={styles.spendSummary}>{approval.summary}</Text>
+        </>
+      ) : (
+        <Text style={styles.summary}>{approval.summary}</Text>
+      )}
       {pending ? (
         <View style={styles.actions}>
           <Pressable style={styles.approve} onPress={() => onRespond(approval.id, "approved")}>
-            <Text style={styles.approveText}>Approve</Text>
+            <Text style={styles.approveText}>
+              {isSpend ? `Approve $${(amountCents / 100).toFixed(0)}` : "Approve"}
+            </Text>
           </Pressable>
           <Pressable style={styles.deny} onPress={() => onRespond(approval.id, "denied")}>
             <Text style={styles.denyText}>Deny</Text>
@@ -151,6 +179,30 @@ const styles = StyleSheet.create({
   cardPending: {
     borderColor: "rgba(232,93,26,0.4)",
     backgroundColor: "rgba(232,93,26,0.06)",
+  },
+  cardSpend: {
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  spendAmountRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    marginBottom: 8,
+  },
+  spendAmount: {
+    fontSize: 32,
+    fontWeight: "600",
+    color: colors.ink,
+    fontFamily: "Menlo",
+  },
+  spendMerchant: { fontSize: 13, color: colors.iron },
+  spendPurpose: { color: colors.ink, fontSize: 13, lineHeight: 18, marginBottom: 6 },
+  spendSummary: {
+    color: colors.iron,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 12,
   },
   kind: {
     fontSize: 11,

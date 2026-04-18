@@ -21,6 +21,7 @@ type ApprovalPart = {
   approval_id: string;
   approval_kind: string;
   summary: string;
+  details?: Record<string, unknown>;
   business_id: string;
   expires_at: string;
   resolvedAs?: "approved" | "denied";
@@ -79,6 +80,7 @@ export default function ChatScreen() {
               approval_id: ev.approval_id,
               approval_kind: ev.approval_kind,
               summary: ev.summary,
+              details: ev.details,
               business_id: ev.business_id,
               expires_at: ev.expires_at,
             },
@@ -236,6 +238,48 @@ function ApprovalCardInline({
     );
   }
 
+  const d = part.details ?? {};
+  const isSpend =
+    part.approval_kind === "spend" &&
+    typeof d.amount_cents === "number" &&
+    (d.amount_cents as number) > 0;
+
+  if (isSpend) {
+    const amountCents = d.amount_cents as number;
+    const merchant = typeof d.merchant_hint === "string" ? (d.merchant_hint as string) : "";
+    const purpose = typeof d.purpose === "string" ? (d.purpose as string) : "";
+    return (
+      <View style={[styles.approvalCard, styles.spendApprovalCard]}>
+        <View style={styles.approvalHeader}>
+          <Text style={styles.approvalKind}>Spend approval</Text>
+          <Text style={styles.approvalExpiry}>expires {expires}</Text>
+        </View>
+        <View style={styles.spendAmountRow}>
+          <Text style={styles.spendAmount}>${(amountCents / 100).toFixed(2)}</Text>
+          {merchant ? <Text style={styles.spendMerchant}>to {merchant}</Text> : null}
+        </View>
+        {purpose ? (
+          <Text style={styles.spendPurpose}>
+            <Text style={{ color: colors.iron }}>Why: </Text>
+            {purpose}
+          </Text>
+        ) : null}
+        <Text style={styles.spendSummary}>{part.summary}</Text>
+        <View style={styles.approvalActions}>
+          <Pressable
+            style={styles.approveBtn}
+            onPress={() => onRespond(part.approval_id, "approved")}
+          >
+            <Text style={styles.approveText}>Approve ${(amountCents / 100).toFixed(0)}</Text>
+          </Pressable>
+          <Pressable style={styles.denyBtn} onPress={() => onRespond(part.approval_id, "denied")}>
+            <Text style={styles.denyText}>Deny</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.approvalCard}>
       <View style={styles.approvalHeader}>
@@ -344,6 +388,30 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     marginVertical: 8,
+  },
+  spendApprovalCard: {
+    borderColor: colors.accent,
+    borderWidth: 2,
+  },
+  spendAmountRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    marginBottom: 8,
+  },
+  spendAmount: {
+    fontSize: 32,
+    fontWeight: "600",
+    color: colors.ink,
+    fontFamily: "Menlo",
+  },
+  spendMerchant: { fontSize: 13, color: colors.iron },
+  spendPurpose: { color: colors.ink, fontSize: 13, lineHeight: 18, marginBottom: 6 },
+  spendSummary: {
+    color: colors.iron,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 12,
   },
   approvalHeader: {
     flexDirection: "row",

@@ -160,6 +160,7 @@ function TurnPartView({
       approval_kind={ev.approval_kind}
       summary={ev.summary}
       expires_at={ev.expires_at}
+      details={ev.details}
       onRespond={(status) => onApproval(ev.approval_id, status)}
     />
   );

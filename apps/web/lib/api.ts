@@ -35,6 +35,7 @@ export type ChatEvent =
       approval_id: string;
       approval_kind: string;
       summary: string;
+      details?: Record<string, unknown>;
       business_id: string;
       expires_at: string;
     }

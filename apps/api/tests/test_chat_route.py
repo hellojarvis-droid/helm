@@ -331,6 +331,11 @@ async def test_request_user_approval_creates_row_and_emits_event(session, monkey
                             "kind": "spend",
                             "summary": "Spend $340 on 3 TikTok creatives.",
                             "business_id": str(biz_id),
+                            "details": {
+                                "amount_cents": 34000,
+                                "merchant_hint": "TikTok Ads",
+                                "purpose": "3 creatives targeting 25-34 home-decor",
+                            },
                         },
                     }
                 ],
@@ -358,11 +363,14 @@ async def test_request_user_approval_creates_row_and_emits_event(session, monkey
         assert r.status_code == 200
         events = await _read_sse_events(r.aiter_bytes())
 
-    # SSE must surface an approval_requested event.
+    # SSE must surface an approval_requested event — with details so the
+    # client can render a money-aware card without a follow-up fetch.
     approval_events = [e for e in events if e["kind"] == "approval_requested"]
     assert len(approval_events) == 1
     assert approval_events[0]["approval_kind"] == "spend"
     assert approval_events[0]["business_id"] == str(biz_id)
+    assert approval_events[0]["details"]["amount_cents"] == 34000
+    assert approval_events[0]["details"]["merchant_hint"] == "TikTok Ads"
 
     # DB must have the approvals row.
     rows = (

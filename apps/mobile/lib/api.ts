@@ -37,6 +37,7 @@ export type ChatEvent =
       approval_id: string;
       approval_kind: string;
       summary: string;
+      details?: Record<string, unknown>;
       business_id: string;
       expires_at: string;
     }
@@ -316,6 +317,7 @@ export interface Approval {
   business_id: string;
   kind: string;
   summary: string;
+  details: Record<string, unknown>;
   status: "pending" | "approved" | "denied" | "modified" | "expired";
   requested_at: string;
   responded_at: string | null;
