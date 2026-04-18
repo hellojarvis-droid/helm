@@ -231,8 +231,10 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
 
     fake_user = CurrentUser(supabase_id="sub-chat-3", email="chat3@example.com", raw_claims={})
 
-    # Turn 1: CEO responds with tool_use calling product_builder.
+    # Turn 1: CEO responds with tool_use calling ads_operator (still stubbed).
     # Turn 2: CEO responds with text to the user using the stub's response.
+    # We pick ads_operator intentionally because product_builder is now real
+    # and would attempt an Anthropic call — stubs stay instant + zero-cost.
     seq = _SequenceStreamClient(
         responses=[
             {
@@ -242,15 +244,15 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
                         "id": "tu_1",
                         "name": "delegate_to_specialist",
                         "input": {
-                            "specialist_name": "product_builder",
-                            "task": "launch a candle store",
+                            "specialist_name": "ads_operator",
+                            "task": "plan a Meta launch campaign",
                         },
                     }
                 ],
                 "stop_reason": "tool_use",
             },
             {
-                "text": "Product Builder isn't online yet — here's what it would do: (relayed)",
+                "text": "Ads Operator isn't online yet — here's what it would do: (relayed)",
                 "stop_reason": "end_turn",
             },
         ]
@@ -300,7 +302,7 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
         .all()
     )
     assert len(rows) == 1
-    assert rows[0].agent_name == "product_builder"
+    assert rows[0].agent_name == "ads_operator"
     assert rows[0].payload["status"] == "not_implemented"
 
 
