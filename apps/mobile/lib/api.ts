@@ -1,11 +1,11 @@
+import EventSource from "react-native-sse";
 import { mobileEnv } from "./env";
 import { supabase } from "./supabase";
 
 /**
- * Helm API client for mobile — mirrors apps/web/lib/api.ts surface but
- * uses buffered chat responses instead of SSE (RN's fetch doesn't expose
- * a ReadableStream API across all platforms yet). Streaming lands in
- * Session 12 via `react-native-sse` or an expo-polyfill.
+ * Helm API client for mobile — mirrors apps/web/lib/api.ts surface, now
+ * with true SSE streaming via react-native-sse (XHR-under-the-hood, works
+ * in Expo Go + native, new arch safe).
  */
 
 async function authHeader(): Promise<Record<string, string>> {
@@ -23,72 +23,121 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
 }
 
 // ──────────────────────────────────────────────────────────
-// Chat — buffered. SSE streaming lands Session 12.
+// Chat — SSE streaming (react-native-sse)
 // ──────────────────────────────────────────────────────────
 
-export interface ChatTurnResult {
-  agentText: string;
-  toolCalls: string[];
-  approvals: {
-    approval_id: string;
-    approval_kind: string;
-    summary: string;
-    expires_at: string;
-  }[];
-  costCents: number;
-  error?: string;
-}
+// Matches apps/api/helm/agents/runtime.py ChatEvent shape.
+export type ChatEvent =
+  | { kind: "user_logged"; text: string }
+  | { kind: "text_delta"; text: string }
+  | { kind: "tool_call"; name: string; input?: Record<string, unknown> }
+  | { kind: "tool_result"; name: string; is_error?: boolean }
+  | {
+      kind: "approval_requested";
+      approval_id: string;
+      approval_kind: string;
+      summary: string;
+      business_id: string;
+      expires_at: string;
+    }
+  | { kind: "turn_cost"; input_tokens: number; output_tokens: number; cost_cents: number }
+  | { kind: "done" }
+  | { kind: "error"; reason: string; detail?: string };
 
-export async function sendChatTurn(message: string, businessId?: string): Promise<ChatTurnResult> {
+/**
+ * Stream a chat turn, yielding ChatEvents as they arrive.
+ *
+ * `react-native-sse`'s EventSource is callback-based; we bridge to an
+ * AsyncIterable via a resolver queue so consumers write `for await (...)`
+ * the same way they do on web.
+ */
+export async function* streamChatTurn(
+  message: string,
+  businessId?: string,
+  signal?: AbortSignal,
+): AsyncIterable<ChatEvent> {
   const env = mobileEnv();
-  const res = await fetch(`${env.helmApiBase}/chat`, {
+  const token = (await supabase().auth.getSession()).data.session?.access_token;
+  if (!token) throw new Error("not signed in");
+
+  const es = new EventSource(`${env.helmApiBase}/chat`, {
     method: "POST",
     headers: {
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       Accept: "text/event-stream",
-      ...(await authHeader()),
     },
     body: JSON.stringify({ message, business_id: businessId ?? null }),
+    // Our FastAPI SSE sends one event per data: line; let the library
+    // deliver them via "message" events in arrival order.
+    pollingInterval: 0,
   });
-  if (!res.ok) throw new Error(`chat ${res.status}: ${await res.text()}`);
 
-  // Consume the whole SSE body as text, then parse events offline.
-  // Gives us an end-of-turn snapshot without needing a streaming reader.
-  const body = await res.text();
-  const result: ChatTurnResult = {
-    agentText: "",
-    toolCalls: [],
-    approvals: [],
-    costCents: 0,
+  // Bridge callbacks → queue. Resolvers line up to pull queued events.
+  const queue: ChatEvent[] = [];
+  const waiters: Array<(ev: ChatEvent | null) => void> = [];
+  let done = false;
+
+  const push = (ev: ChatEvent) => {
+    const waiter = waiters.shift();
+    if (waiter) waiter(ev);
+    else queue.push(ev);
+  };
+  const finish = () => {
+    done = true;
+    while (waiters.length) {
+      const w = waiters.shift();
+      if (w) w(null);
+    }
   };
 
-  for (const frame of body.split("\n\n")) {
-    for (const line of frame.split("\n")) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        const event = JSON.parse(line.slice("data: ".length));
-        if (event.kind === "text_delta") {
-          result.agentText += event.text ?? "";
-        } else if (event.kind === "tool_call") {
-          result.toolCalls.push(event.name);
-        } else if (event.kind === "approval_requested") {
-          result.approvals.push({
-            approval_id: event.approval_id,
-            approval_kind: event.approval_kind,
-            summary: event.summary,
-            expires_at: event.expires_at,
-          });
-        } else if (event.kind === "turn_cost") {
-          result.costCents = event.cost_cents ?? 0;
-        } else if (event.kind === "error") {
-          result.error = `${event.reason}${event.detail ? `: ${event.detail}` : ""}`;
+  es.addEventListener("message", (event: { data?: string | null }) => {
+    if (typeof event.data !== "string") return;
+    try {
+      push(JSON.parse(event.data) as ChatEvent);
+    } catch {
+      // Malformed frame — skip defensively.
+    }
+  });
+  es.addEventListener("error", (event) => {
+    const detail =
+      typeof (event as { message?: unknown }).message === "string"
+        ? (event as { message: string }).message
+        : "stream error";
+    push({ kind: "error", reason: "sse_error", detail });
+    finish();
+  });
+  es.addEventListener("close", () => finish());
+
+  const onAbort = () => {
+    es.close();
+    finish();
+  };
+  signal?.addEventListener("abort", onAbort);
+
+  try {
+    while (!done || queue.length > 0) {
+      const next = queue.shift();
+      if (next) {
+        yield next;
+        if (next.kind === "done") {
+          es.close();
+          return;
         }
-      } catch {
-        // Skip malformed frames — defensive.
+        continue;
+      }
+      const incoming = await new Promise<ChatEvent | null>((resolve) => waiters.push(resolve));
+      if (incoming === null) return;
+      yield incoming;
+      if (incoming.kind === "done") {
+        es.close();
+        return;
       }
     }
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    es.close();
   }
-  return result;
 }
 
 // ──────────────────────────────────────────────────────────

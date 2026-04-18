@@ -1,3 +1,4 @@
+import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -41,10 +42,17 @@ export default function ApprovalsScreen() {
   }
 
   async function respond(id: string, status: "approved" | "denied") {
+    Haptics.impactAsync(
+      status === "approved"
+        ? Haptics.ImpactFeedbackStyle.Medium
+        : Haptics.ImpactFeedbackStyle.Light,
+    );
     try {
       await respondToApproval(id, status);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await load();
     } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError(e instanceof Error ? e.message : String(e));
     }
   }
