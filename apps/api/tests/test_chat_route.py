@@ -283,7 +283,7 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
 
     tool_call_event = next(e for e in events if e["kind"] == "tool_call")
     assert tool_call_event["name"] == "delegate_to_specialist"
-    assert tool_call_event["input"]["specialist_name"] == "product_builder"
+    assert tool_call_event["input"]["specialist_name"] == "ads_operator"
 
     # The specialist's completion should be in the event log.
     from helm.services.sessions import get_or_create_ceo_session
