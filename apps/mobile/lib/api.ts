@@ -377,11 +377,30 @@ export interface BillingState {
   monthly_tokens: number;
   businesses_used: number;
   month_to_date_cost_cents: number;
+  subscription_status: string;
 }
 
 export async function getBilling(): Promise<BillingState> {
   const res = await apiFetch("/billing/me");
   if (!res.ok) throw new Error(`getBilling ${res.status}`);
+  return res.json();
+}
+
+export async function openBillingPortal(): Promise<{ url: string }> {
+  const res = await apiFetch("/billing/portal", { method: "POST" });
+  if (!res.ok) throw new Error(`openBillingPortal ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function startBillingCheckout(
+  targetTier: "founder" | "operator" | "portfolio",
+): Promise<{ url: string }> {
+  const res = await apiFetch("/billing/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_tier: targetTier }),
+  });
+  if (!res.ok) throw new Error(`startBillingCheckout ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
