@@ -1,5 +1,6 @@
 import * as Haptics from "expo-haptics";
-import { useState } from "react";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -11,11 +12,42 @@ import {
 } from "react-native";
 import { BillingCard } from "@/components/BillingCard";
 import { colors } from "@/lib/colors";
+import { clearPushToken } from "@/lib/push";
+import { supabase } from "@/lib/supabase";
 import { useKillSwitch } from "@/lib/useKillSwitch";
 
 export default function SafetyScreen() {
   const { active, busy, error, toggle } = useKillSwitch();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    void supabase()
+      .auth.getUser()
+      .then(({ data }) => setEmail(data.user?.email ?? null));
+  }, []);
+
+  async function signOut() {
+    setSigningOut(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      // Clear the push token server-side first so a freshly-signed-out
+      // phone stops receiving approval pushes intended for the prior user.
+      try {
+        await clearPushToken();
+      } catch {
+        // Best-effort — a bad network here shouldn't block sign-out.
+      }
+      await supabase().auth.signOut();
+      router.replace("/sign-in");
+    } catch {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSigningOut(false);
+    }
+  }
 
   async function onToggle() {
     if (active === null) return;
@@ -105,6 +137,22 @@ export default function SafetyScreen() {
         <View style={styles.billingBlock}>
           <Text style={styles.sectionHeader}>Plan</Text>
           <BillingCard />
+        </View>
+
+        <View style={styles.accountBlock}>
+          <Text style={styles.sectionHeader}>Account</Text>
+          {email ? <Text style={styles.accountEmail}>{email}</Text> : null}
+          <Pressable
+            style={[styles.signOut, signingOut && { opacity: 0.5 }]}
+            onPress={signOut}
+            disabled={signingOut}
+          >
+            {signingOut ? (
+              <ActivityIndicator color={colors.iron} />
+            ) : (
+              <Text style={styles.signOutText}>Sign out</Text>
+            )}
+          </Pressable>
         </View>
       </View>
 
@@ -206,6 +254,24 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(107,107,107,0.2)",
   },
+  accountBlock: {
+    gap: 10,
+    marginTop: 24,
+    paddingTop: 20,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(107,107,107,0.2)",
+  },
+  accountEmail: { color: colors.iron, fontSize: 13, fontFamily: "Menlo" },
+  signOut: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(107,107,107,0.3)",
+    alignItems: "center",
+  },
+  signOutText: { color: colors.iron, fontSize: 14, fontWeight: "500" },
   sectionHeader: {
     fontSize: 11,
     fontWeight: "600",
