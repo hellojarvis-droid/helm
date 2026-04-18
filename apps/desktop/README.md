@@ -28,15 +28,16 @@ cargo install tauri-cli --version "^2.0"
 Then from the repo root:
 
 ```bash
-pnpm web:dev                        # http://localhost:3000
-pnpm --filter @helm/desktop dev     # opens a native window on localhost:3000
+pnpm web:dev                              # http://localhost:3000
+pnpm --filter @helm/desktop tauri:dev     # opens a native window on localhost:3000
 ```
 
 For a production build (signed + notarized on macOS is a follow-up):
 
 ```bash
-pnpm --filter @helm/desktop build
+pnpm --filter @helm/desktop tauri:build
 ```
 
-Not wired into root `pnpm build`/`pnpm typecheck` — cargo is the build
-system here and CI gates only the JS/Python workspaces today.
+Scripts are prefixed `tauri:` so turbo's root pipeline (which runs
+`build`, `dev`, `lint`, `test`, `typecheck`) doesn't try to invoke
+cargo on CI workers that don't have the Rust toolchain.
