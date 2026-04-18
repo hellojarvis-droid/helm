@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -13,6 +14,16 @@ const UPGRADE_TIERS: { target: "operator" | "portfolio"; label: string }[] = [
 ];
 
 export default function BillingPage() {
+  return (
+    <Suspense fallback={null}>
+      <BillingContent />
+    </Suspense>
+  );
+}
+
+function BillingContent() {
+  const params = useSearchParams();
+  const checkoutResult = params.get("status"); // 'success' | 'cancel' set by Stripe redirects
   const [state, setState] = useState<BillingState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyTier, setBusyTier] = useState<string | null>(null);
@@ -51,6 +62,18 @@ export default function BillingPage() {
     <div className="min-h-screen">
       <Nav />
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-6">
+        {checkoutResult === "success" ? (
+          <div className="rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
+            <strong className="font-semibold">Upgrade complete.</strong> Stripe confirmed the
+            subscription. Your tier reflects the new plan as soon as the webhook lands — usually
+            instant.
+          </div>
+        ) : null}
+        {checkoutResult === "cancel" ? (
+          <div className="rounded-md border border-iron/30 bg-haze/40 px-4 py-3 text-sm text-iron">
+            Checkout cancelled. Your current plan is unchanged.
+          </div>
+        ) : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {!state && !error ? <p className="text-sm text-iron">Loading…</p> : null}
         {state ? (
