@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.config import get_settings
 from helm.db.models import AgentEvent, Business, Integration
-from helm.services import composio_client, event_log, kill_switch
+from helm.services import composio_client, event_log, kill_switch, tracing
 
 log = structlog.get_logger("helm.specialists")
 
@@ -228,6 +228,23 @@ class LLMSpecialist:
             )
             messages.append(cast(MessageParam, {"role": "user", "content": tool_results}))
 
+        cost_cents = _cost_cents_for(self.model, input_tokens, output_tokens)
+        tracing.record_generation(
+            session_id=ctx.session_id,
+            user_id=ctx.user_id,
+            business_id=ctx.business_id,
+            agent_name=self.name,
+            model=self.model,
+            input_messages=cast(list[dict[str, Any]], messages[-5:]),
+            output_text=final_text,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_cents=cost_cents,
+            metadata={
+                "stop_reason": final_stop_reason,
+                "composio_tools_available": bool(composio_slugs),
+            },
+        )
         return SpecialistResult(
             specialist=self.name,
             status="ok",
@@ -239,7 +256,7 @@ class LLMSpecialist:
                 "output_tokens": output_tokens,
                 "composio_tools_available": bool(composio_slugs),
             },
-            cost_cents=_cost_cents_for(self.model, input_tokens, output_tokens),
+            cost_cents=cost_cents,
         )
 
     # ────────────────────────────────────────────────────────────────

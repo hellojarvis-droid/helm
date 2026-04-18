@@ -26,6 +26,7 @@ from helm.routes import integrations as integrations_routes
 from helm.routes import kill_switch as kill_switch_routes
 from helm.routes import stripe as stripe_routes
 from helm.routes import webhooks as webhooks_routes
+from helm.services import tracing
 
 
 def _init_sentry() -> None:
@@ -51,6 +52,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        tracing.flush()
         log.info("api.shutdown")
 
 

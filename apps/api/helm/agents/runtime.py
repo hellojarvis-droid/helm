@@ -41,7 +41,7 @@ import helm.agents.specialists.registry  # noqa: F401
 from helm.agents.tools import CEO_TOOL_IMPLS, CEO_TOOLS, ToolContext
 from helm.config import get_settings
 from helm.db.models import AgentEvent
-from helm.services import event_log, kill_switch
+from helm.services import event_log, kill_switch, tracing
 
 log = structlog.get_logger("helm.runtime")
 
@@ -308,6 +308,18 @@ class MessagesRuntime:
             agent_name="ceo_agent",
             payload={"text": text, "content_blocks": content},
             business_id=state.business_id,
+            cost_cents=cost_cents,
+        )
+        tracing.record_generation(
+            session_id=state.session_id,
+            user_id=state.user_id,
+            business_id=state.business_id,
+            agent_name="ceo_agent",
+            model=_CEO_MODEL,
+            input_messages=state.messages[-5:],  # trailing context only
+            output_text=text,
+            input_tokens=state.input_tokens,
+            output_tokens=state.output_tokens,
             cost_cents=cost_cents,
         )
 
