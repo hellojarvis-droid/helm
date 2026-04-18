@@ -29,6 +29,7 @@ htmlcov/
 .turbo/
 .next/
 out/
+*.tsbuildinfo
 
 # Env
 .env
