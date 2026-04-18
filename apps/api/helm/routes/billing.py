@@ -48,6 +48,10 @@ class CheckoutResponse(BaseModel):
     url: str
 
 
+class PortalResponse(BaseModel):
+    url: str
+
+
 @router.get("/me", response_model=BillingState)
 async def get_billing(
     user: CurrentUser = Depends(require_user),
@@ -134,3 +138,29 @@ async def start_checkout(
         raise HTTPException(status_code=502, detail=f"stripe checkout failed: {e}") from e
 
     return CheckoutResponse(url=url)
+
+
+@router.post("/portal", response_model=PortalResponse)
+async def open_portal(
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_session),
+) -> PortalResponse:
+    """Open the Stripe Customer Portal so the user can manage their
+    subscription (change plan, update payment method, cancel, view invoices).
+    Requires a Stripe customer — created automatically on first /checkout.
+    """
+    user_row = await sync_user_from_supabase(db, user)
+    if not user_row.stripe_customer_id:
+        raise HTTPException(
+            status_code=409,
+            detail="no Stripe customer yet — upgrade via /billing/checkout first",
+        )
+    settings = get_settings()
+    try:
+        url = await stripe_billing.create_portal_session(
+            customer_id=user_row.stripe_customer_id,
+            return_url=settings.billing_success_url,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"stripe portal failed: {e}") from e
+    return PortalResponse(url=url)

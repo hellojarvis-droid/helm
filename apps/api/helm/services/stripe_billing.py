@@ -88,6 +88,28 @@ async def create_checkout_session(
     return await _in_thread(_create)
 
 
+async def create_portal_session(*, customer_id: str, return_url: str) -> str:
+    """Open a Stripe Customer Portal session. Returns the URL.
+
+    The Portal lets the user update their payment method, change plan,
+    pause, or cancel — all hosted by Stripe. Requires the portal to be
+    enabled in the Stripe dashboard (one-time setup, same test/live as
+    the rest of the Billing config).
+    """
+    s = _configured_stripe()
+
+    def _create() -> str:
+        session = s.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=return_url,
+        )
+        if not session.url:
+            raise RuntimeError("Stripe returned a portal session without a URL")
+        return str(session.url)
+
+    return await _in_thread(_create)
+
+
 def extract_price_id(subscription: dict[str, Any]) -> str | None:
     """Pull the first item's price ID out of a subscription object."""
     items = subscription.get("items") or {}

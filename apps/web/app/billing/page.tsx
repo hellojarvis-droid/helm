@@ -5,7 +5,7 @@ import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
-import { type BillingState, getBilling, startBillingCheckout } from "@/lib/api";
+import { type BillingState, getBilling, openBillingPortal, startBillingCheckout } from "@/lib/api";
 
 const UPGRADE_TIERS: { target: "operator" | "portfolio"; label: string }[] = [
   { target: "operator", label: "Upgrade to Operator" },
@@ -28,6 +28,18 @@ export default function BillingPage() {
     setError(null);
     try {
       const { url } = await startBillingCheckout(target);
+      window.location.href = url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusyTier(null);
+    }
+  }
+
+  async function goToPortal() {
+    setBusyTier("portal");
+    setError(null);
+    try {
+      const { url } = await openBillingPortal();
       window.location.href = url;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -77,13 +89,21 @@ export default function BillingPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Upgrade</CardTitle>
+                <CardTitle>
+                  {state.subscription_status === "active" ? "Subscription" : "Upgrade"}
+                </CardTitle>
                 <CardDescription>
-                  Higher tiers unlock more businesses and a larger included token budget. Self-serve
-                  upgrade lands in a later session.
+                  {state.subscription_status === "active"
+                    ? "Change plan, update payment method, pause, or cancel via Stripe."
+                    : "Higher tiers unlock more businesses and a larger included token budget."}
                 </CardDescription>
               </CardHeader>
               <div className="flex flex-wrap gap-2">
+                {state.subscription_status === "active" ? (
+                  <Button variant="primary" disabled={busyTier !== null} onClick={goToPortal}>
+                    {busyTier === "portal" ? "Opening Stripe…" : "Manage subscription"}
+                  </Button>
+                ) : null}
                 {UPGRADE_TIERS.filter((t) => t.target !== state.tier).map((t) => (
                   <Button
                     key={t.target}
@@ -101,6 +121,11 @@ export default function BillingPage() {
                   Contact support
                 </a>
               </div>
+              {state.subscription_status && state.subscription_status !== "inactive" ? (
+                <div className="text-xs text-iron mt-3">
+                  Status: <span className="tabular">{state.subscription_status}</span>
+                </div>
+              ) : null}
             </Card>
           </>
         ) : null}
