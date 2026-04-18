@@ -1,0 +1,46 @@
+version: 2
+updates:
+  # JS/TS — root + every workspace pinned via the monorepo lockfile.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: America/New_York }
+    open-pull-requests-limit: 8
+    groups:
+      sentry:
+        patterns: ["@sentry/*"]
+      next-react:
+        patterns: ["next", "react", "react-dom", "@types/react", "@types/react-dom"]
+      expo-sdk:
+        patterns: ["expo", "expo-*"]
+      tailwind:
+        patterns: ["tailwindcss", "autoprefixer", "postcss"]
+    ignore:
+      # Pinning Next.js + Expo to canon — major bumps land in a deliberate
+      # session, not a Dependabot PR.
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major"]
+
+  # Python — uv-managed, pyproject lockfile.
+  - package-ecosystem: pip
+    directory: "/apps/api"
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: America/New_York }
+    open-pull-requests-limit: 5
+    groups:
+      sqlalchemy:
+        patterns: ["sqlalchemy", "alembic", "asyncpg", "pgvector"]
+      anthropic:
+        patterns: ["anthropic", "openai"]
+
+  # GitHub Actions — keep the workflow runners + setup actions current.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: America/New_York }
+    open-pull-requests-limit: 5
+
+  # Tauri / Cargo — desktop shell deps.
+  - package-ecosystem: cargo
+    directory: "/apps/desktop/src-tauri"
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: America/New_York }
+    open-pull-requests-limit: 3
