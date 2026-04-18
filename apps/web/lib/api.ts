@@ -257,6 +257,37 @@ export async function respondToApproval(
 }
 
 // ──────────────────────────────────────────────────────────
+// Today — cross-business aggregate
+// ──────────────────────────────────────────────────────────
+
+export interface BusinessToday {
+  id: string;
+  name: string;
+  vertical: string;
+  status: string;
+  revenue_today_cents: number;
+  spend_today_cents: number;
+  net_today_cents: number;
+  pending_approval_count: number;
+}
+
+export interface TodaySummary {
+  revenue_today_cents: number;
+  spend_today_cents: number;
+  net_today_cents: number;
+  pending_approval_count: number;
+  window_hours: number;
+  since: string;
+  businesses: BusinessToday[];
+}
+
+export async function getToday(): Promise<TodaySummary> {
+  const res = await apiFetch("/users/me/today");
+  if (!res.ok) throw new Error(`getToday: ${res.status}`);
+  return res.json();
+}
+
+// ──────────────────────────────────────────────────────────
 // Kill switch — CLAUDE.md hard rule #2
 // ──────────────────────────────────────────────────────────
 

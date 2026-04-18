@@ -12,5 +12,5 @@ export default function Home() {
   }, []);
 
   if (signedIn === null) return null;
-  return <Redirect href={signedIn ? "/(tabs)/chat" : "/sign-in"} />;
+  return <Redirect href={signedIn ? "/(tabs)/today" : "/sign-in"} />;
 }

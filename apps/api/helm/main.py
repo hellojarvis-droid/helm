@@ -25,6 +25,7 @@ from helm.routes import health as health_routes
 from helm.routes import integrations as integrations_routes
 from helm.routes import kill_switch as kill_switch_routes
 from helm.routes import stripe as stripe_routes
+from helm.routes import today as today_routes
 from helm.routes import webhooks as webhooks_routes
 from helm.services import tracing
 
@@ -92,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(integrations_routes.router)
     app.include_router(webhooks_routes.router)
     app.include_router(stripe_routes.router)
+    app.include_router(today_routes.router)
     return app
 
 

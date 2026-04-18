@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 const items = [
+  { href: "/today" as const, label: "Today" },
   { href: "/chat" as const, label: "Chat" },
   { href: "/businesses" as const, label: "Businesses" },
   { href: "/approvals" as const, label: "Approvals" },
