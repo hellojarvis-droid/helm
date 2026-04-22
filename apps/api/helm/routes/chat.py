@@ -29,6 +29,7 @@ from helm.auth import CurrentUser, require_user
 from helm.config import get_settings
 from helm.db.session import get_session, session_scope
 from helm.db.tenant import get_business_for_user
+from helm.errors import ClientError
 from helm.services import sessions
 from helm.services.user_sync import sync_user_from_supabase
 
@@ -140,6 +141,13 @@ async def transcribe_audio(
         text = await asyncio.to_thread(_call)
     except Exception as e:  # surface as 502 so the client can retry
         log.warning("chat.transcribe_failed", err=str(e)[:300])
-        raise HTTPException(status_code=502, detail=f"transcription failed: {e}") from e
+        raise ClientError(
+            "transcription_failed",
+            status_code=502,
+            message=(
+                "Voice transcription failed. Try recording again, or type "
+                "your message."
+            ),
+        ) from e
 
     return TranscribeResponse(text=text)

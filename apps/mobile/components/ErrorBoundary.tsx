@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/react-native";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "@/lib/colors";
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
 
 interface State {
   error: Error | null;
+  eventId: string | null;
 }
 
 /**
@@ -20,36 +21,59 @@ interface State {
  * what componentDidCatch is for.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  override state: State = { error: null };
+  override state: State = { error: null, eventId: null };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error, eventId: null };
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
+    const eventId = Sentry.captureException(error, {
+      extra: { componentStack: info.componentStack },
+    });
+    if (eventId) this.setState({ eventId });
   }
 
   reset = (): void => {
-    this.setState({ error: null });
+    this.setState({ error: null, eventId: null });
+  };
+
+  emailSupport = (): void => {
+    const ref = this.state.eventId ?? "";
+    const subject = ref ? `Helm error — reference ${ref}` : "Helm error";
+    const body = ref
+      ? `I hit an error on Helm. Error reference: ${ref}\n\nWhat I was trying to do:\n`
+      : `I hit an error on Helm.\n\nWhat I was trying to do:\n`;
+    const url = `mailto:support@helm.app?subject=${encodeURIComponent(
+      subject,
+    )}&body=${encodeURIComponent(body)}`;
+    Linking.openURL(url).catch(() => undefined);
   };
 
   override render(): ReactNode {
     if (!this.state.error) return this.props.children;
+    const { eventId } = this.state;
     return (
       <View style={styles.container}>
         <Text style={styles.eyebrow}>Helm hit a wall</Text>
         <Text style={styles.title}>The app crashed.</Text>
         <Text style={styles.body}>
-          We&apos;ve logged it. Try again — if it keeps happening, email{" "}
-          <Text style={styles.email}>support@helm.app</Text>.
+          We&apos;ve logged it. Try again — if it keeps happening, email support and we&apos;ll
+          dig in.
         </Text>
-        {this.state.error.message ? (
-          <Text style={styles.errCode}>{this.state.error.message.slice(0, 200)}</Text>
+        {eventId ? (
+          <Text style={styles.errCode} selectable>
+            Error reference: {eventId}
+          </Text>
         ) : null}
-        <Pressable style={styles.button} onPress={this.reset}>
-          <Text style={styles.buttonText}>Try again</Text>
-        </Pressable>
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.button} onPress={this.reset}>
+            <Text style={styles.buttonText}>Try again</Text>
+          </Pressable>
+          <Pressable style={styles.buttonSecondary} onPress={this.emailSupport}>
+            <Text style={styles.buttonSecondaryText}>Email support</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -93,12 +117,24 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: "center",
   },
-  button: {
+  buttonRow: {
+    flexDirection: "row",
+    gap: 10,
     marginTop: 24,
+  },
+  button: {
     backgroundColor: colors.accent,
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 6,
   },
   buttonText: { color: colors.paper, fontWeight: "500", fontSize: 14 },
+  buttonSecondary: {
+    borderWidth: 1,
+    borderColor: colors.iron,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 6,
+  },
+  buttonSecondaryText: { color: colors.ink, fontWeight: "500", fontSize: 14 },
 });

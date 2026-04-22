@@ -29,6 +29,7 @@ from helm.auth import CurrentUser, require_user
 from helm.db.models import Integration
 from helm.db.session import get_session
 from helm.db.tenant import get_business_for_user
+from helm.errors import upstream_unavailable
 from helm.services import composio_client
 from helm.services.user_sync import sync_user_from_supabase
 
@@ -103,8 +104,9 @@ async def connect(
             business_id=business_id,
         )
     except RuntimeError as e:
-        # Composio misconfigured or toolkit not enabled — surface useful error.
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        # Composio misconfigured or toolkit not enabled — log full detail,
+        # return a canned message so we don't leak internal state to clients.
+        raise upstream_unavailable("The integrations service") from e
 
     if existing is not None:
         existing.composio_connection_id = conn.connection_id

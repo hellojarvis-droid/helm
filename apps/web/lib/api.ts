@@ -60,7 +60,22 @@ export async function* streamChat(
     body: JSON.stringify({ message, business_id: businessId ?? null }),
   });
   if (!res.ok || !res.body) {
-    throw new Error(`chat request failed: ${res.status} ${await res.text()}`);
+    // Drain the body so the connection closes cleanly; we intentionally
+    // don't surface it to the user — API messages come from detail.message.
+    await res.text().catch(() => "");
+    const traceId = res.headers.get("x-trace-id") ?? "";
+    let message: string;
+    if (res.status === 401 || res.status === 403) {
+      message = "Your session expired. Sign in again.";
+    } else if (res.status >= 500) {
+      message = "The chat service isn't responding. Try again in a moment.";
+    } else {
+      message = "Chat request failed. Try again.";
+    }
+    const err = new Error(message) as Error & { traceId?: string; status?: number };
+    err.traceId = traceId;
+    err.status = res.status;
+    throw err;
   }
 
   const reader = res.body.getReader();

@@ -37,6 +37,7 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         trace_id = request.headers.get(TRACE_HEADER) or uuid.uuid4().hex
+        request.state.trace_id = trace_id
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
             trace_id=trace_id,

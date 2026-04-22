@@ -11,12 +11,13 @@ from contextlib import asynccontextmanager
 
 import sentry_sdk
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from helm.config import get_settings
 from helm.logging import configure_logging
-from helm.middleware import CorrelationIdMiddleware
+from helm.middleware import TRACE_HEADER, CorrelationIdMiddleware
 from helm.routes import approvals as approvals_routes
 from helm.routes import auth as auth_routes
 from helm.routes import billing as billing_routes
@@ -85,6 +86,57 @@ def create_app() -> FastAPI:
         )
 
     app.add_middleware(CorrelationIdMiddleware)
+
+    log = structlog.get_logger("helm.api")
+
+    @app.exception_handler(HTTPException)
+    async def _http_exception_handler(
+        request: Request, exc: HTTPException
+    ) -> JSONResponse:
+        trace_id = getattr(request.state, "trace_id", None) or ""
+        detail = exc.detail
+        if isinstance(detail, dict):
+            body: dict[str, object] = {**detail}
+            if trace_id and "trace_id" not in body:
+                body["trace_id"] = trace_id
+        else:
+            body = {"message": str(detail), "trace_id": trace_id}
+        headers = dict(exc.headers or {})
+        if trace_id:
+            headers.setdefault(TRACE_HEADER, trace_id)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": body},
+            headers=headers,
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        trace_id = getattr(request.state, "trace_id", None) or ""
+        # Sentry's FastAPI integration auto-captures; log locally too so the
+        # trace_id + path + exception type are greppable in stdout.
+        log.error(
+            "request.unhandled_exception",
+            exc_type=type(exc).__name__,
+            path=request.url.path,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": {
+                    "error": "internal_error",
+                    "message": (
+                        "Something went wrong on our side. If it keeps "
+                        "happening, email support@helm.app with this reference."
+                    ),
+                    "trace_id": trace_id,
+                }
+            },
+            headers={TRACE_HEADER: trace_id} if trace_id else {},
+        )
+
     app.include_router(health_routes.router)
     app.include_router(auth_routes.router)
     app.include_router(chat_routes.router)

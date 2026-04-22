@@ -22,6 +22,7 @@ from helm.auth import CurrentUser, require_user
 from helm.config import get_settings
 from helm.db.models import AgentEvent, Business
 from helm.db.session import get_session
+from helm.errors import upstream_unavailable
 from helm.services import stripe_billing, tier_limits
 from helm.services.user_sync import sync_user_from_supabase
 
@@ -135,7 +136,7 @@ async def start_checkout(
             cancel_url=settings.billing_cancel_url,
         )
     except Exception as e:  # surface as 502 so the client can retry
-        raise HTTPException(status_code=502, detail=f"stripe checkout failed: {e}") from e
+        raise upstream_unavailable("Stripe") from e
 
     return CheckoutResponse(url=url)
 
@@ -162,5 +163,5 @@ async def open_portal(
             return_url=settings.billing_success_url,
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"stripe portal failed: {e}") from e
+        raise upstream_unavailable("Stripe") from e
     return PortalResponse(url=url)

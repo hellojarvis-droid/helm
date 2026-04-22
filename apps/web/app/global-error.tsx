@@ -20,6 +20,15 @@ export default function GlobalError({
     Sentry.captureException(error);
   }, [error]);
 
+  const digest = error.digest;
+  const mailto = digest
+    ? `mailto:support@helm.app?subject=${encodeURIComponent(
+        `Helm error — reference ${digest}`,
+      )}&body=${encodeURIComponent(
+        `I hit an error on Helm. Error reference: ${digest}\n\nWhat I was trying to do:\n`,
+      )}`
+    : "mailto:support@helm.app";
+
   return (
     <html lang="en">
       <body
@@ -52,12 +61,12 @@ export default function GlobalError({
           </h1>
           <p style={{ fontSize: 14, color: "#6B6B6B", lineHeight: 1.5 }}>
             We&apos;ve logged the error. Reload to try again. If it keeps happening, email{" "}
-            <a href="mailto:support@helm.app" style={{ color: "#0A0A0A" }}>
+            <a href={mailto} style={{ color: "#0A0A0A" }}>
               support@helm.app
-            </a>
-            .
+            </a>{" "}
+            with the reference below and we&apos;ll dig in.
           </p>
-          {error.digest ? (
+          {digest ? (
             <p
               style={{
                 fontSize: 11,
@@ -66,7 +75,7 @@ export default function GlobalError({
                 marginTop: 16,
               }}
             >
-              ref: {error.digest}
+              Error reference: {digest}
             </p>
           ) : null}
           <button

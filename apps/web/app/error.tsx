@@ -21,6 +21,15 @@ export default function Error({
     Sentry.captureException(error);
   }, [error]);
 
+  const digest = error.digest;
+  const mailto = digest
+    ? `mailto:support@helm.app?subject=${encodeURIComponent(
+        `Helm error — reference ${digest}`,
+      )}&body=${encodeURIComponent(
+        `I hit an error on Helm. Error reference: ${digest}\n\nWhat I was trying to do:\n`,
+      )}`
+    : "mailto:support@helm.app";
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center space-y-4">
@@ -29,19 +38,23 @@ export default function Error({
         </div>
         <h1 className="text-2xl font-semibold tracking-tight">The page hit an error.</h1>
         <p className="text-sm text-iron leading-relaxed">
-          We&apos;ve logged it. Try again — or, if it keeps happening, reach out and we&apos;ll dig
-          in.
+          We&apos;ve logged it. Try again — or, if it keeps happening, email support and we&apos;ll
+          dig in.
         </p>
-        {error.digest ? <p className="text-xs text-iron font-mono">ref: {error.digest}</p> : null}
+        {digest ? (
+          <p className="text-xs text-iron font-mono">
+            Error reference: <span className="select-all">{digest}</span>
+          </p>
+        ) : null}
         <div className="flex items-center justify-center gap-2 pt-2">
           <Button variant="accent" onClick={reset}>
             Try again
           </Button>
           <a
-            href="mailto:support@helm.app"
+            href={mailto}
             className="inline-flex items-center justify-center h-10 px-4 text-sm rounded-md border border-iron/30 hover:bg-haze"
           >
-            Contact support
+            Email support
           </a>
         </div>
       </div>
