@@ -20,6 +20,7 @@ from helm.auth import CurrentUser, require_user
 from helm.config import get_settings
 from helm.db.session import get_session
 from helm.db.tenant import get_business_for_user
+from helm.errors import upstream_unavailable
 from helm.services import stripe_client
 from helm.services.user_sync import sync_user_from_supabase
 
@@ -81,8 +82,8 @@ async def onboard(
             return_url=return_url,
             refresh_url=refresh_url,
         )
-    except Exception as e:  # Stripe.error or wrapper RuntimeError
-        raise HTTPException(status_code=502, detail=f"stripe onboarding link failed: {e!s}") from e
+    except Exception as exc:  # Stripe.error or wrapper RuntimeError
+        raise upstream_unavailable("Stripe") from exc
 
     return OnboardResponse(
         account_id=account_id,
@@ -179,8 +180,8 @@ async def provision_issuing(
                 business_name=biz.name,
                 business_email=user_row.email,
             )
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"stripe cardholder create: {e!s}") from e
+        except Exception as exc:
+            raise upstream_unavailable("Stripe") from exc
         biz.stripe_issuing_cardholder_id = cardholder_id
         await db.commit()
 
@@ -191,8 +192,8 @@ async def provision_issuing(
             weekly_spend_cap_cents=biz.weekly_spend_cap_cents,
             allowed_mcc_codes=sorted(_DEFAULT_MCC_ALLOWLIST),
         )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"stripe card create: {e!s}") from e
+    except Exception as exc:
+        raise upstream_unavailable("Stripe") from exc
 
     biz.stripe_card_id = card_id
     await db.commit()

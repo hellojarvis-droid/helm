@@ -1,3 +1,4 @@
+import { ApiError, apiErrorFromResponse } from "@/lib/api-error";
 import { clientEnv } from "@/lib/env";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -5,13 +6,24 @@ import { supabaseBrowser } from "@/lib/supabase/client";
  * Helm API client. Each call attaches the current Supabase access token as
  * a Bearer. For SSE (chat) we use the Fetch API + a manual reader so we can
  * surface ChatEvent objects as they arrive.
+ *
+ * On !res.ok, every call throws an `ApiError` (see ./api-error) with a
+ * user-safe message, the server error code, and the trace ID — callers
+ * render `err.userMessage` directly and read `err.code` to branch on
+ * specific conditions.
  */
 
 export async function authHeader(): Promise<HeadersInit> {
   const supabase = supabaseBrowser();
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) throw new Error("not signed in");
+  if (!token) {
+    throw new ApiError({
+      code: "not_signed_in",
+      status: 401,
+      userMessage: "You're not signed in. Sign in to continue.",
+    });
+  }
   return { Authorization: `Bearer ${token}` };
 }
 
@@ -60,22 +72,9 @@ export async function* streamChat(
     body: JSON.stringify({ message, business_id: businessId ?? null }),
   });
   if (!res.ok || !res.body) {
-    // Drain the body so the connection closes cleanly; we intentionally
-    // don't surface it to the user — API messages come from detail.message.
-    await res.text().catch(() => "");
-    const traceId = res.headers.get("x-trace-id") ?? "";
-    let message: string;
-    if (res.status === 401 || res.status === 403) {
-      message = "Your session expired. Sign in again.";
-    } else if (res.status >= 500) {
-      message = "The chat service isn't responding. Try again in a moment.";
-    } else {
-      message = "Chat request failed. Try again.";
-    }
-    const err = new Error(message) as Error & { traceId?: string; status?: number };
-    err.traceId = traceId;
-    err.status = res.status;
-    throw err;
+    // apiErrorFromResponse will try to parse the envelope, so it consumes
+    // (via clone) the body — we don't need to drain it ourselves.
+    throw await apiErrorFromResponse(res, "streamChat");
   }
 
   const reader = res.body.getReader();
@@ -117,7 +116,7 @@ export interface Business {
 
 export async function listBusinesses(): Promise<Business[]> {
   const res = await apiFetch("/businesses");
-  if (!res.ok) throw new Error(`listBusinesses: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "listBusinesses");
   return res.json();
 }
 
@@ -131,7 +130,7 @@ export async function createBusiness(body: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`createBusiness: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "createBusiness");
   return res.json();
 }
 
@@ -148,7 +147,7 @@ export type BusinessDetail = Business & {
 
 export async function getBusiness(id: string): Promise<BusinessDetail> {
   const res = await apiFetch(`/businesses/${id}`);
-  if (!res.ok) throw new Error(`getBusiness: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "getBusiness");
   return res.json();
 }
 
@@ -166,7 +165,7 @@ export async function updateBusiness(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`updateBusiness: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "updateBusiness");
   return res.json();
 }
 
@@ -179,7 +178,7 @@ export interface StripeOnboardResponse {
 
 export async function startStripeOnboarding(businessId: string): Promise<StripeOnboardResponse> {
   const res = await apiFetch(`/businesses/${businessId}/stripe/onboard`, { method: "POST" });
-  if (!res.ok) throw new Error(`startStripeOnboarding: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "startStripeOnboarding");
   return res.json();
 }
 
@@ -197,7 +196,7 @@ export interface SpendSummary {
 
 export async function getSpend(businessId: string): Promise<SpendSummary> {
   const res = await apiFetch(`/businesses/${businessId}/spend`);
-  if (!res.ok) throw new Error(`getSpend: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "getSpend");
   return res.json();
 }
 
@@ -219,9 +218,9 @@ export async function listEvents(
   const params = new URLSearchParams();
   if (opts.limit) params.set("limit", String(opts.limit));
   if (opts.beforeId) params.set("before_id", String(opts.beforeId));
-  const qs = params.toString();
-  const res = await apiFetch(`/businesses/${businessId}/events${qs ? `?${qs}` : ""}`);
-  if (!res.ok) throw new Error(`listEvents: ${res.status}`);
+  const queryString = params.toString();
+  const res = await apiFetch(`/businesses/${businessId}/events${queryString ? `?${queryString}` : ""}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "listEvents");
   return res.json();
 }
 
@@ -252,14 +251,14 @@ export interface Approval {
 
 export async function getApproval(id: string): Promise<Approval> {
   const res = await apiFetch(`/approvals/${id}`);
-  if (!res.ok) throw new Error(`getApproval: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "getApproval");
   return res.json();
 }
 
 export async function listApprovals(status?: Approval["status"]): Promise<Approval[]> {
   const qs = status ? `?status=${encodeURIComponent(status)}` : "";
   const res = await apiFetch(`/approvals${qs}`);
-  if (!res.ok) throw new Error(`listApprovals: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "listApprovals");
   return res.json();
 }
 
@@ -273,7 +272,7 @@ export async function respondToApproval(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status, modifications: modifications ?? null }),
   });
-  if (!res.ok) throw new Error(`respondToApproval: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "respondToApproval");
   return res.json();
 }
 
@@ -304,7 +303,7 @@ export interface TodaySummary {
 
 export async function getToday(): Promise<TodaySummary> {
   const res = await apiFetch("/users/me/today");
-  if (!res.ok) throw new Error(`getToday: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "getToday");
   return res.json();
 }
 
@@ -318,7 +317,7 @@ export interface KillSwitchState {
 
 export async function getKillSwitch(): Promise<KillSwitchState> {
   const res = await apiFetch("/users/me/kill_switch");
-  if (!res.ok) throw new Error(`getKillSwitch: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "getKillSwitch");
   return res.json();
 }
 
@@ -328,7 +327,7 @@ export async function setKillSwitch(active: boolean): Promise<KillSwitchState> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ active }),
   });
-  if (!res.ok) throw new Error(`setKillSwitch: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "setKillSwitch");
   return res.json();
 }
 
@@ -348,7 +347,7 @@ export interface BillingState {
 
 export async function getBilling(): Promise<BillingState> {
   const res = await apiFetch("/billing/me");
-  if (!res.ok) throw new Error(`getBilling: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "getBilling");
   return res.json();
 }
 
@@ -360,12 +359,12 @@ export async function startBillingCheckout(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ target_tier: targetTier }),
   });
-  if (!res.ok) throw new Error(`startBillingCheckout: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "startBillingCheckout");
   return res.json();
 }
 
 export async function openBillingPortal(): Promise<{ url: string }> {
   const res = await apiFetch("/billing/portal", { method: "POST" });
-  if (!res.ok) throw new Error(`openBillingPortal: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "openBillingPortal");
   return res.json();
 }
