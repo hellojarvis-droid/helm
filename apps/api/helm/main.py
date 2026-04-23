@@ -90,9 +90,7 @@ def create_app() -> FastAPI:
     log = structlog.get_logger("helm.api")
 
     @app.exception_handler(HTTPException)
-    async def _http_exception_handler(
-        request: Request, exc: HTTPException
-    ) -> JSONResponse:
+    async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
         trace_id = getattr(request.state, "trace_id", None) or ""
         detail = exc.detail
         if isinstance(detail, dict):
@@ -111,9 +109,7 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(Exception)
-    async def _unhandled_exception_handler(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         trace_id = getattr(request.state, "trace_id", None) or ""
         # Sentry's FastAPI integration auto-captures; log locally too so the
         # trace_id + path + exception type are greppable in stdout.

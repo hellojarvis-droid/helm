@@ -144,10 +144,7 @@ async def transcribe_audio(
         raise ClientError(
             "transcription_failed",
             status_code=502,
-            message=(
-                "Voice transcription failed. Try recording again, or type "
-                "your message."
-            ),
+            message=("Voice transcription failed. Try recording again, or type your message."),
         ) from e
 
     return TranscribeResponse(text=text)
