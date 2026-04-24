@@ -60,19 +60,33 @@ async def onboard(
         raise HTTPException(status_code=404, detail="business not found")
 
     settings = get_settings()
-    base = settings.api_base_url.rstrip("/")
-    return_url = f"{base}/businesses/{business_id}/stripe/callback?status=return"
-    refresh_url = f"{base}/businesses/{business_id}/stripe/callback?status=refresh"
+    # Return the user to the web business-detail page after Stripe finishes
+    # or when Stripe needs to refresh the link. The API's domain is the wrong
+    # place — the user doesn't have a browser session there, and nothing in
+    # the API renders a UI. web_base_url is the Vercel/localhost origin.
+    web = settings.web_base_url.rstrip("/")
+    return_url = f"{web}/businesses/{business_id}?stripe=return"
+    refresh_url = f"{web}/businesses/{business_id}?stripe=refresh"
 
     reused = False
     if biz.stripe_account_id:
         account_id = biz.stripe_account_id
         reused = True
     else:
-        account_id = await stripe_client.create_connect_account(
-            business_name=biz.name,
-            business_email=user_row.email,
-        )
+        # Wrap in try/except so an invalid Stripe key or network error surfaces
+        # as a proper 502 with a JSON body — an unhandled exception here
+        # produces a 500 with no CORS header, which browsers report to the
+        # user as the opaque "Failed to fetch" instead of showing our message.
+        try:
+            account_id = await stripe_client.create_connect_account(
+                business_name=biz.name,
+                business_email=user_row.email,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"stripe connect account create failed: {e!s}",
+            ) from e
         biz.stripe_account_id = account_id
         await db.commit()
 

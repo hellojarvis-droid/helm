@@ -89,6 +89,12 @@ class Settings(BaseSettings):
 
     # Phase 1+ — not yet exercised
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
+    # Single knob that swaps the brain the Creative Studio specialists
+    # use. Haiku 4.5 is the default for cost; flip to claude-sonnet-4-6
+    # for higher-quality output (or claude-opus-4-7 for strategy runs).
+    specialist_model: str = Field(
+        "claude-haiku-4-5-20251001", alias="HELM_SPECIALIST_MODEL"
+    )
     composio_api_key: str = Field("", alias="COMPOSIO_API_KEY")
     composio_mcp_url: str = Field("https://mcp.composio.dev", alias="COMPOSIO_MCP_URL")
     composio_webhook_secret: str = Field("", alias="COMPOSIO_WEBHOOK_SECRET")
@@ -109,6 +115,38 @@ class Settings(BaseSettings):
     default_approval_threshold_cents: int = Field(
         default=10000, alias="DEFAULT_APPROVAL_THRESHOLD_CENTS"
     )
+
+    # In-process cron (services/scheduler.py). Default on in prod; off under
+    # pytest (tests assert no background tasks leak). Flip with env var.
+    scheduler_enabled: bool = Field(default=True, alias="HELM_SCHEDULER_ENABLED")
+
+    # Fernet key for encrypting api_key_ciphertext on `integrations` +
+    # `account_integrations` rows. Generate with `python -c "from
+    # cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+    # When unset, api-key integrations refuse to save (fail closed).
+    # Never log this.
+    integration_secret: str = Field(default="", alias="HELM_INTEGRATION_SECRET")
+
+    # Helm-managed Creative-Studio provider keys. When set, these
+    # take precedence over any user-pasted keys in
+    # `account_integrations` — we pay the provider and debit the user's
+    # credits balance for the cost. When unset, adapters fall back to
+    # the user's pasted key (transitional BYOK) or fail closed.
+    runway_api_key: str = Field(default="", alias="HELM_RUNWAY_API_KEY")
+    higgsfield_api_key: str = Field(default="", alias="HELM_HIGGSFIELD_API_KEY")
+    kling_api_key: str = Field(default="", alias="HELM_KLING_API_KEY")
+    nano_banana_api_key: str = Field(default="", alias="HELM_NANO_BANANA_API_KEY")
+    veo_api_key: str = Field(default="", alias="HELM_VEO_API_KEY")
+    ideogram_api_key: str = Field(default="", alias="HELM_IDEOGRAM_API_KEY")
+    flux_api_key: str = Field(default="", alias="HELM_FLUX_API_KEY")
+    midjourney_api_key: str = Field(default="", alias="HELM_MIDJOURNEY_API_KEY")
+    cartesia_api_key: str = Field(default="", alias="HELM_CARTESIA_API_KEY")
+    suno_api_key: str = Field(default="", alias="HELM_SUNO_API_KEY")
+    stability_api_key: str = Field(default="", alias="HELM_STABILITY_API_KEY")
+
+    # Builder feature flag — gate new nav + routes. Enabled locally by
+    # default; flip off in prod until the feature is ready for rollout.
+    builder_enabled: bool = Field(default=True, alias="HELM_BUILDER_ENABLED")
 
 
 @lru_cache

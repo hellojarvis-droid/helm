@@ -154,6 +154,109 @@ async def get_approval(
     return ApprovalResponse.from_row(row)
 
 
+class TraceEvent(BaseModel):
+    id: int
+    event_type: str
+    agent_name: str
+    payload: dict[str, Any]
+    cost_cents: int
+    created_at: datetime
+
+
+class TraceResponse(BaseModel):
+    approval_id: uuid.UUID
+    session_id: uuid.UUID | None
+    events: list[TraceEvent]
+    total_cost_cents: int
+
+
+@router.get("/{approval_id}/trace", response_model=TraceResponse)
+async def get_trace(
+    approval_id: uuid.UUID,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_session),
+) -> TraceResponse:
+    """Return the chain of agent events that led to this approval.
+
+    The "Why?" affordance needs an audit trail tied to *this* approval's
+    creation moment — so we find the `approval_requested` event whose
+    payload.approval_id matches, then return every prior event in the same
+    session up to that point (bounded to the last 20 to keep the payload
+    small). This gives the UI the user's message → agent reasoning → tool
+    calls → specialist completions that produced the request.
+    """
+    user_row = await sync_user_from_supabase(db, user)
+    approval_q = await db.execute(select(Approval).where(Approval.id == approval_id))
+    approval = approval_q.scalar_one_or_none()
+    if approval is None or not await _user_owns_approval(db, user_row.id, approval):
+        raise HTTPException(status_code=404, detail="approval not found")
+
+    # Find the event that created this approval. JSONB containment match on
+    # approval_id is the authoritative link — the approval row doesn't hold
+    # a session_id reference today, but its originating event does.
+    anchor_q = await db.execute(
+        select(AgentEvent)
+        .where(
+            AgentEvent.event_type == "approval_requested",
+            AgentEvent.payload.op("@>")({"approval_id": str(approval_id)}),
+        )
+        .order_by(AgentEvent.created_at.desc())
+        .limit(1)
+    )
+    anchor = anchor_q.scalar_one_or_none()
+    if anchor is None:
+        # Approval exists but no anchoring event — empty trace, not 404.
+        return TraceResponse(
+            approval_id=approval_id,
+            session_id=None,
+            events=[],
+            total_cost_cents=0,
+        )
+
+    # Walk backward in the same session: last 20 events up to the anchor.
+    trail_q = await db.execute(
+        select(AgentEvent)
+        .where(
+            AgentEvent.session_id == anchor.session_id,
+            AgentEvent.id <= anchor.id,
+            AgentEvent.event_type.in_(
+                (
+                    "message.user",
+                    "message.agent",
+                    "tool_call",
+                    "tool_result",
+                    "specialist_completed",
+                    "approval_requested",
+                    "launch_step_completed",
+                    "launch_step_skipped",
+                    "launch_step_failed",
+                )
+            ),
+        )
+        .order_by(AgentEvent.id.desc())
+        .limit(20)
+    )
+    rows = list(reversed(list(trail_q.scalars().all())))
+    events = [
+        TraceEvent(
+            id=r.id,
+            event_type=r.event_type,
+            agent_name=r.agent_name,
+            payload=r.payload,
+            cost_cents=r.cost_cents,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+    total = sum(e.cost_cents for e in events)
+    return TraceResponse(
+        approval_id=approval_id,
+        session_id=anchor.session_id,
+        events=events,
+        total_cost_cents=total,
+    )
+
+
 @router.post("/{approval_id}/respond", response_model=ApprovalResponse)
 async def respond(
     approval_id: uuid.UUID,

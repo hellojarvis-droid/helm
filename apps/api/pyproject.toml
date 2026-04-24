@@ -23,6 +23,7 @@ dependencies = [
   "composio>=0.8.0",
   "stripe>=11.4.0",
   "openai>=2.32.0",
+  "cryptography>=44.0.0",
 ]
 
 [dependency-groups]

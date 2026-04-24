@@ -28,7 +28,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from helm.config import get_settings
 from helm.db.models import Business, Integration, User
 from helm.db.session import get_session
-from helm.services import event_log, stripe_authorization, stripe_billing, stripe_client
+from helm.services import (
+    credits,
+    event_log,
+    stripe_authorization,
+    stripe_billing,
+    stripe_client,
+    sync_bus,
+)
+from helm.services.sync_stripe import STRIPE_CARD_CAPS_ENTITY, stripe_event_timestamp
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 log = structlog.get_logger("helm.webhooks")
@@ -187,9 +195,188 @@ async def stripe_webhook(
         "customer.subscription.deleted",
     }:
         return await _handle_subscription_event(db, event_type, data_obj)
+    if event_type == "issuing_card.updated":
+        return await _handle_issuing_card_updated(db, event, data_obj)
+    if event_type == "checkout.session.completed":
+        return await _handle_checkout_completed(db, data_obj)
+    if event_type == "invoice.paid":
+        return await _handle_invoice_paid(db, data_obj)
 
     # Unknown event type — ack so Stripe doesn't retry forever.
     return {"status": "ignored", "type": event_type}
+
+
+async def _handle_checkout_completed(
+    db: AsyncSession, session: dict[str, Any]
+) -> dict[str, Any]:
+    """Settle a credits top-up. Storefront direct-charges on connected
+    accounts flow through `payment_intent.succeeded` on the business's
+    account; only our platform-scoped credits sessions carry the
+    `kind=credits_topup` metadata we stamp in routes/credits.py.
+
+    Idempotent: `credits.purchase` dedupes on PaymentIntent id so a
+    webhook replay returns the same transaction row.
+    """
+    metadata = session.get("metadata") or {}
+    if str(metadata.get("kind", "")) != "credits_topup":
+        return {"status": "ignored", "reason": "non-credits checkout"}
+
+    payment_status = str(session.get("payment_status") or "").lower()
+    # Stripe marks `paid` for immediate captures. Bank-transfer flows
+    # fire `checkout.session.async_payment_succeeded` instead — a
+    # follow-up session-completed event lands with payment_status=paid
+    # once the bank clears, so we don't need a separate handler here.
+    if payment_status != "paid":
+        return {
+            "status": "pending",
+            "payment_status": payment_status,
+            "reason": "awaiting async payment settlement",
+        }
+
+    try:
+        user_id_str = str(metadata["user_id"])
+        credit_amount_cents = int(metadata["credit_amount_cents"])
+        fee_cents = int(metadata.get("fee_cents", 0))
+        method = str(metadata.get("payment_method", "card"))
+    except (KeyError, ValueError) as e:
+        log.warning("stripe.credits_topup_bad_metadata", err=str(e))
+        return {"status": "ignored", "reason": "bad metadata"}
+
+    import uuid as _uuid
+
+    try:
+        user_id = _uuid.UUID(user_id_str)
+    except ValueError:
+        return {"status": "ignored", "reason": "bad user_id"}
+
+    payment_intent_id = session.get("payment_intent")
+    checkout_session_id = session.get("id")
+
+    txn = await credits.purchase(
+        db,
+        user_id=user_id,
+        amount_cents=credit_amount_cents,
+        stripe_payment_intent_id=(
+            str(payment_intent_id) if isinstance(payment_intent_id, str) else None
+        ),
+        stripe_checkout_session_id=(
+            str(checkout_session_id) if isinstance(checkout_session_id, str) else None
+        ),
+        description=(
+            f"Top-up: ${credit_amount_cents / 100:.2f} credits "
+            f"(paid via {method})."
+        ),
+        meta={
+            "payment_method": method,
+            "fee_cents": fee_cents,
+            "total_charge_cents": int(metadata.get("total_charge_cents", 0)),
+        },
+    )
+    await db.commit()
+    return {
+        "status": "ok",
+        "credits_txn_id": str(txn.id),
+        "credit_amount_cents": credit_amount_cents,
+    }
+
+
+async def _handle_invoice_paid(
+    db: AsyncSession, invoice: dict[str, Any]
+) -> dict[str, Any]:
+    """Settle monthly tier credits on a successful renewal invoice.
+
+    Stripe fires `invoice.paid` at the start of every billing cycle
+    for active subscriptions. We look up the user by customer_id,
+    determine their current tier, and grant the tier's monthly
+    credits. The unique `(user_id, cycle_start)` constraint on
+    `subscription_grants` catches webhook replays.
+    """
+    from datetime import UTC
+    from datetime import datetime as _dt
+
+    customer_id = invoice.get("customer")
+    if not isinstance(customer_id, str) or not customer_id:
+        return {"status": "ignored", "reason": "no customer id"}
+
+    user_q = await db.execute(
+        select(User).where(User.stripe_customer_id == customer_id)
+    )
+    user = user_q.scalar_one_or_none()
+    if user is None:
+        return {"status": "ignored", "reason": "no user for customer"}
+
+    # Prefer the invoice line item's `period` — it's the authoritative
+    # range for a subscription cycle. Fall back to the invoice-level
+    # `period_start`/`period_end` for older webhook shapes.
+    period_start_ts = invoice.get("period_start")
+    period_end_ts = invoice.get("period_end")
+    lines = invoice.get("lines", {})
+    line_items = lines.get("data") if isinstance(lines, dict) else None
+    if (
+        isinstance(line_items, list)
+        and line_items
+        and isinstance(line_items[0], dict)
+        and "period" in line_items[0]
+    ):
+        period = line_items[0].get("period") or {}
+        period_start_ts = period.get("start") or period_start_ts
+        period_end_ts = period.get("end") or period_end_ts
+
+    if not isinstance(period_start_ts, int) or not isinstance(period_end_ts, int):
+        return {"status": "ignored", "reason": "no period timestamps"}
+
+    cycle_start = _dt.fromtimestamp(period_start_ts, tz=UTC)
+    cycle_end = _dt.fromtimestamp(period_end_ts, tz=UTC)
+
+    txn = await credits.subscription_grant(
+        db,
+        user_id=user.id,
+        tier=user.tier,
+        cycle_start=cycle_start,
+        cycle_end=cycle_end,
+    )
+    if txn is None:
+        await db.commit()
+        return {"status": "noop", "reason": "already granted or no allowance"}
+    await db.commit()
+    return {
+        "status": "ok",
+        "tier": user.tier,
+        "amount_cents": txn.amount_cents,
+        "cycle_start": cycle_start.isoformat(),
+    }
+
+
+async def _handle_issuing_card_updated(
+    db: AsyncSession, full_event: Any, card: dict[str, Any]
+) -> dict[str, Any]:
+    """Mirror a Stripe-side cap change onto our `businesses` row via the
+    sync bus. Helm-wins semantics apply — if Helm pushed more recently
+    than the webhook timestamp, sync_bus.pull tags it as a conflict
+    and doesn't overwrite."""
+    card_id = str(card.get("id") or "")
+    if not card_id:
+        return {"status": "ignored", "reason": "no card id"}
+
+    biz_q = await db.execute(select(Business).where(Business.stripe_card_id == card_id))
+    biz = biz_q.scalar_one_or_none()
+    ts = stripe_event_timestamp(
+        full_event if isinstance(full_event, dict) else dict(full_event)
+    )
+    outcome = await sync_bus.pull(
+        db,
+        entity_type=STRIPE_CARD_CAPS_ENTITY,
+        external_id=card_id,
+        external_updated_at=ts,
+        business_id=biz.id if biz is not None else None,
+        user_id=biz.user_id if biz is not None else None,
+        payload=card,
+    )
+    return {
+        "status": outcome.status,
+        "direction": outcome.direction,
+        "detail": outcome.detail,
+    }
 
 
 async def _handle_account_updated(db: AsyncSession, account: dict[str, Any]) -> dict[str, Any]:

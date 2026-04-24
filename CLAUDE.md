@@ -117,6 +117,18 @@ This whole step should take one session. If it's taking longer, you're over-engi
 
 Working name: **Helm**. Domain: check `helm.ai` (likely taken — propose 3 alternatives). The user will pick the final name before public launch. Until then, use `Helm` everywhere in code, branding, and copy.
 
+## 8. End-of-Task Workflow: `/handoff`
+
+Before reporting any meaningful task complete, run the **handoff chain** defined in `~/.claude/commands/handoff.md`:
+
+1. `git status --short && git diff --stat` — confirm there's real work to review.
+2. `codex exec -s read-only "…"` — Codex (GPT-5.4) does an advisory review of the uncommitted diff. Apply findings you agree with; surface disagreements to the user.
+3. `cursor-agent -p --force --trust "…"` — Cursor does a style/clarity polish pass (no logic changes).
+4. `pnpm typecheck && pnpm lint && pnpm test` — verify nothing broke. Fix, don't paper over.
+5. One-paragraph summary to the user: what you built, what Codex caught, what Cursor polished, what's verified passing. No raw tool output.
+
+Skip for trivial edits only (one-line typos, comments, config tweaks). The full chain applies to every real feature/fix/refactor. See `~/.claude/commands/handoff.md` for exact prompts and failure handling.
+
 ---
 
 *This document is the source of truth. If another doc contradicts this one, this one wins and the other doc gets updated.*

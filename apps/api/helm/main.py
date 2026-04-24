@@ -21,15 +21,28 @@ from helm.middleware import TRACE_HEADER, CorrelationIdMiddleware
 from helm.routes import approvals as approvals_routes
 from helm.routes import auth as auth_routes
 from helm.routes import billing as billing_routes
+from helm.routes import brand_library as brand_library_routes
+from helm.routes import builder as builder_routes
 from helm.routes import businesses as businesses_routes
+from helm.routes import canvas as canvas_routes
 from helm.routes import chat as chat_routes
+from helm.routes import connections as connections_routes
+from helm.routes import creatives as creatives_routes
+from helm.routes import credits as credits_routes
+from helm.routes import events as events_routes
+from helm.routes import expenses as expenses_routes
 from helm.routes import health as health_routes
 from helm.routes import integrations as integrations_routes
 from helm.routes import kill_switch as kill_switch_routes
+from helm.routes import launches as launches_routes
+from helm.routes import reformat as reformat_routes
+from helm.routes import renders as renders_routes
+from helm.routes import scheduled_posts as scheduled_posts_routes
+from helm.routes import storefronts as storefronts_routes
 from helm.routes import stripe as stripe_routes
 from helm.routes import today as today_routes
 from helm.routes import webhooks as webhooks_routes
-from helm.services import tracing
+from helm.services import launch_workflow, scheduler, tracing
 
 
 def _init_sentry() -> None:
@@ -52,9 +65,21 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     log = structlog.get_logger("helm.api")
     settings = get_settings()
     log.info("api.startup", env=settings.env, version="0.0.0")
+    # Resume any launches that were mid-flight when the previous process
+    # stopped. Best-effort — a DB outage here shouldn't block startup.
+    try:
+        resumed = await launch_workflow.resume_pending_launches()
+        if resumed:
+            log.info("api.launches_resumed", count=resumed)
+    except Exception as e:
+        log.warning("api.launches_resume_failed", err=str(e)[:200])
+    # Start the in-process scheduler. No-op when HELM_SCHEDULER_ENABLED=false
+    # (tests, local dev without Composio/Stripe).
+    await scheduler.start()
     try:
         yield
     finally:
+        await scheduler.stop()
         tracing.flush()
         log.info("api.shutdown")
 
@@ -138,12 +163,27 @@ def create_app() -> FastAPI:
     app.include_router(chat_routes.router)
     app.include_router(kill_switch_routes.router)
     app.include_router(businesses_routes.router)
+    app.include_router(brand_library_routes.router)
+    app.include_router(builder_routes.router)
+    app.include_router(builder_routes.public_router)
+    app.include_router(canvas_routes.router)
+    app.include_router(launches_routes.router)
+    app.include_router(reformat_routes.router)
+    app.include_router(renders_routes.router)
+    app.include_router(scheduled_posts_routes.router)
     app.include_router(approvals_routes.router)
+    app.include_router(connections_routes.router)
+    app.include_router(creatives_routes.router)
+    app.include_router(credits_routes.router)
+    app.include_router(events_routes.router)
+    app.include_router(expenses_routes.router)
     app.include_router(integrations_routes.router)
     app.include_router(webhooks_routes.router)
     app.include_router(stripe_routes.router)
     app.include_router(today_routes.router)
     app.include_router(billing_routes.router)
+    app.include_router(storefronts_routes.admin_router)
+    app.include_router(storefronts_routes.public_router)
     return app
 
 

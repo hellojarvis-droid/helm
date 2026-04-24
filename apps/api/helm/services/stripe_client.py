@@ -307,3 +307,143 @@ async def _in_thread[T](fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     """Stripe SDK is blocking — run each call in asyncio's default executor."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, lambda: fn(*args, **kwargs))
+
+
+# ────────────────────────────────────────────────────────────────────
+# Checkout (Helm Storefront → connected account)
+# ────────────────────────────────────────────────────────────────────
+
+
+async def create_credits_checkout_session(
+    *,
+    user_id: str,
+    credit_amount_cents: int,
+    fee_cents: int,
+    total_charge_cents: int,
+    payment_method: str,
+    success_url: str,
+    cancel_url: str,
+) -> str:
+    """One-shot checkout for a credits top-up on Helm's platform account.
+
+    Unlike `create_direct_checkout_session` (which bills the connected
+    merchant on a storefront purchase), this runs on Helm's own Stripe
+    account — we're selling credits to the user, so we are the
+    merchant of record. Two line items so the user sees the breakdown
+    on the hosted checkout page.
+    """
+    s = _configured_stripe()
+
+    def _create() -> str:
+        payment_method_types: list[str]
+        if payment_method == "card":
+            payment_method_types = ["card"]
+        elif payment_method == "us_bank_account":
+            payment_method_types = ["us_bank_account"]
+        else:
+            raise ValueError(f"unsupported payment_method: {payment_method}")
+
+        line_items = [
+            {
+                "price_data": {
+                    "currency": "usd",
+                    "unit_amount": credit_amount_cents,
+                    "product_data": {
+                        "name": f"Helm credits: ${credit_amount_cents / 100:.2f}",
+                        "description": (
+                            "Credits land in your Helm balance on payment success."
+                        ),
+                    },
+                },
+                "quantity": 1,
+            },
+        ]
+        if fee_cents > 0:
+            line_items.append(
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": fee_cents,
+                        "product_data": {
+                            "name": "Stripe processing fee",
+                            "description": (
+                                "Card-network fee charged by Stripe. "
+                                "Not a Helm charge."
+                            ),
+                        },
+                    },
+                    "quantity": 1,
+                }
+            )
+
+        session = s.checkout.Session.create(
+            mode="payment",
+            payment_method_types=payment_method_types,
+            line_items=line_items,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            client_reference_id=user_id,
+            metadata={
+                "kind": "credits_topup",
+                "user_id": user_id,
+                "credit_amount_cents": str(credit_amount_cents),
+                "fee_cents": str(fee_cents),
+                "total_charge_cents": str(total_charge_cents),
+                "payment_method": payment_method,
+            },
+        )
+        return str(session.url)
+
+    return await _in_thread(_create)
+
+
+async def create_direct_checkout_session(
+    *,
+    connected_account_id: str,
+    product_name: str,
+    unit_amount_cents: int,
+    currency: str,
+    quantity: int,
+    success_url: str,
+    cancel_url: str,
+    client_reference_id: str | None = None,
+    description: str | None = None,
+    image_urls: list[str] | None = None,
+) -> str:
+    """Create a one-shot Stripe Checkout session as a Direct Charge on the
+    connected account. Returns the hosted-page URL.
+
+    "Direct charge" means the customer pays the connected account (the
+    business) directly; Stripe's platform-fee mechanics don't apply — we
+    don't skim. When Helm takes a fee later, add `payment_intent_data.
+    application_fee_amount` here.
+    """
+    s = _configured_stripe()
+
+    def _create() -> str:
+        product_data: dict[str, Any] = {"name": product_name}
+        if description:
+            product_data["description"] = description
+        if image_urls:
+            product_data["images"] = image_urls[:8]  # Stripe accepts up to 8
+        session = s.checkout.Session.create(
+            stripe_account=connected_account_id,
+            mode="payment",
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": currency.lower(),
+                        "unit_amount": unit_amount_cents,
+                        "product_data": product_data,
+                    },
+                    "quantity": quantity,
+                }
+            ],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            client_reference_id=client_reference_id,
+        )
+        return str(session.url)
+
+    return await _in_thread(_create)

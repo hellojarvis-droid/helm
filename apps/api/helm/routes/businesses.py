@@ -21,7 +21,14 @@ from helm.config import get_settings
 from helm.db.models import AgentEvent, Business
 from helm.db.session import get_session
 from helm.db.tenant import get_business_for_user, list_businesses_for_user
-from helm.services import stripe_client, tier_limits
+
+# Importing sync_stripe registers the stripe_card_caps entity with sync_bus.
+from helm.services import (
+    sync_bus,
+    sync_stripe,  # noqa: F401
+    tier_limits,
+)
+from helm.services.sync_stripe import STRIPE_CARD_CAPS_ENTITY
 from helm.services.user_sync import sync_user_from_supabase
 
 router = APIRouter(prefix="/businesses", tags=["businesses"])
@@ -208,18 +215,25 @@ async def update_business(
     settings = get_settings()
     if settings.stripe_issuing_enabled and biz.stripe_card_id and biz.stripe_account_id:
         stripe_sync["attempted"] = True
-        try:
-            await stripe_client.update_issuing_caps(
-                account_id=biz.stripe_account_id,
-                card_id=biz.stripe_card_id,
-                weekly_spend_cap_cents=biz.weekly_spend_cap_cents,
-                per_auth_cap_cents=biz.per_auth_cap_cents,
-                allowed_mcc_codes=biz.allowed_mcc_codes,
-            )
-            stripe_sync["synced"] = True
-        except Exception as e:  # surface sync failure to client
-            stripe_sync["synced"] = False
-            stripe_sync["error"] = str(e)[:200]
+        # Route through the sync bus so the local_updated_at watermark
+        # advances — a racing Stripe webhook will see the fresh timestamp
+        # and recognize itself as stale under Helm-wins.
+        outcome = await sync_bus.push(
+            db,
+            entity_type=STRIPE_CARD_CAPS_ENTITY,
+            external_id=biz.stripe_card_id,
+            business_id=biz.id,
+            user_id=biz.user_id,
+            payload={
+                "weekly_spend_cap_cents": biz.weekly_spend_cap_cents,
+                "per_auth_cap_cents": biz.per_auth_cap_cents,
+                "allowed_mcc_codes": biz.allowed_mcc_codes,
+                "stripe_account_id": biz.stripe_account_id,
+            },
+        )
+        stripe_sync["synced"] = outcome.status == "ok"
+        if outcome.status != "ok":
+            stripe_sync["error"] = outcome.error or outcome.status
 
     await db.commit()
     await db.refresh(biz)
@@ -260,6 +274,47 @@ class SpendSummary(BaseModel):
     net_wtd_cents: int
     window_days: int
     since: datetime
+
+
+class SyncStatusResponse(BaseModel):
+    entity_type: str
+    external_id: str
+    last_direction: str
+    last_status: str
+    last_error: str | None
+    local_updated_at: datetime
+    external_updated_at: datetime | None
+
+
+@router.get("/{business_id}/sync_status", response_model=list[SyncStatusResponse])
+async def get_sync_status(
+    business_id: uuid.UUID,
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_session),
+) -> list[SyncStatusResponse]:
+    """Return every sync record attached to this business.
+
+    The UI renders one "Synced X ago · via webhook" chip per entity type
+    — e.g., `stripe_card_caps` shows in the Money card. `last_status ==
+    'conflict'` surfaces as a diff banner so the user sees the collision.
+    """
+    user_row = await sync_user_from_supabase(db, user)
+    biz = await get_business_for_user(db, user_row.id, business_id)
+    if biz is None:
+        raise HTTPException(status_code=404, detail="business not found")
+    rows = await sync_bus.statuses_for_business(db, business_id=business_id)
+    return [
+        SyncStatusResponse(
+            entity_type=r.entity_type,
+            external_id=r.external_id,
+            last_direction=r.last_direction,
+            last_status=r.last_status,
+            last_error=r.last_error,
+            local_updated_at=r.local_updated_at,
+            external_updated_at=r.external_updated_at,
+        )
+        for r in rows
+    ]
 
 
 @router.get("/{business_id}/spend", response_model=SpendSummary)
