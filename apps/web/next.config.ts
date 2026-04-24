@@ -71,7 +71,84 @@ const config: NextConfig = {
     typedRoutes: true,
   },
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    // Builder needs cross-origin isolation for StackBlitz WebContainers
+    // (SharedArrayBuffer), AND a relaxed CSP so WebContainer can spawn
+    // blob: workers and iframe its own dev-server URLs
+    // (*.webcontainer-api.io, *.local-credentialless.webcontainer.io).
+    const CSP_STRICT = SECURITY_HEADERS.find(
+      (h) => h.key === "Content-Security-Policy",
+    )?.value ?? "";
+    const otherBase = SECURITY_HEADERS.filter(
+      (h) => h.key !== "Content-Security-Policy" && h.key !== "X-Frame-Options",
+    );
+
+    // Same connect-src hosts the strict CSP grants, so normal Helm
+    // API + Supabase + Sentry/PostHog all work. THEN add blob:/data:
+    // + any WebContainer-specific targets.
+    const apiBase = process.env.NEXT_PUBLIC_HELM_API_BASE ?? "http://localhost:8000";
+    const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const posthogHost =
+      process.env.NEXT_PUBLIC_POSTHOG_HOST ??
+      "https://us.i.posthog.com https://us-assets.i.posthog.com";
+    const builderConnect = [
+      "'self'",
+      apiBase,
+      supabase,
+      supabase ? supabase.replace("https://", "wss://") : "",
+      "https://*.sentry.io",
+      "https://*.ingest.sentry.io",
+      posthogHost,
+      "https://*.stripe.com",
+      "https://js.stripe.com",
+      // WebContainer runtime RPC + dev-server targets.
+      "https://stackblitz.com",
+      "https://*.stackblitz.io",
+      "https://*.webcontainer-api.io",
+      "https://*.local-credentialless.webcontainer.io",
+      "https://*.w-credentialless-staticblitz.com",
+      "https://*.staticblitz.com",
+      "wss://*.webcontainer-api.io",
+      "wss://*.staticblitz.com",
+      "blob:",
+      "data:",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const builderCSP = [
+      "default-src 'self'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+      "worker-src 'self' blob:",
+      "child-src 'self' blob:",
+      `connect-src ${builderConnect}`,
+      // WebContainer boots its runtime from stackblitz.com and serves
+      // the dev-server iframe from *.staticblitz.com / *.webcontainer.io.
+      "frame-src 'self' blob: https://stackblitz.com https://*.stackblitz.io https://*.webcontainer-api.io https://*.local-credentialless.webcontainer.io https://*.w-credentialless-staticblitz.com https://*.staticblitz.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; ");
+
+    const builderHeaders = [
+      ...otherBase,
+      { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
+      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+      { key: "Content-Security-Policy", value: builderCSP },
+    ];
+    // Keep strict CSP everywhere else.
+    const strictHeaders = SECURITY_HEADERS.map((h) =>
+      h.key === "Content-Security-Policy" ? { ...h, value: CSP_STRICT } : h,
+    );
+    // Order matters: Next merges matching rules in array order, so
+    // the rule that should WIN for conflicting keys (like CSP on
+    // /builder/*) must come LAST.
+    return [
+      { source: "/:path*", headers: strictHeaders },
+      { source: "/builder/:path*", headers: builderHeaders },
+    ];
   },
   async rewrites() {
     // Optional: proxy /api/* to the backend in local dev so the browser can

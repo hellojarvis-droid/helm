@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AppShell } from "@/components/AppShell";
 import { ApprovalCard } from "@/components/chat/ApprovalCard";
-import { Nav } from "@/components/Nav";
+import { Icon } from "@/components/design/Icon";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { apiFetch, type Business, listBusinesses, streamChat, type ChatEvent } from "@/lib/api";
@@ -112,64 +113,71 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Nav />
-
-      <main className="flex-1 max-w-3xl w-full mx-auto px-6 py-6 flex flex-col gap-4 overflow-y-auto">
-        {parts.length === 0 && !pending && (
-          <EmptyChat onPick={(prompt) => setInput(prompt)} hasBusinesses={businesses.length > 0} />
-        )}
-        {parts.map((part, i) => (
-          <TurnPartView key={i} part={part} onApproval={respond} />
-        ))}
-        {pending && (
-          <div className="text-sm leading-relaxed whitespace-pre-wrap">
-            {pending}
-            <span className="inline-block w-1 h-4 bg-ink/60 dark:bg-paper/60 align-middle ml-0.5 animate-pulse" />
-          </div>
-        )}
-        {error && <div className="text-sm text-danger">{error}</div>}
-      </main>
-
-      <footer className="border-t border-iron/20 px-6 py-4 max-w-3xl w-full mx-auto space-y-3">
-        {businesses.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            <BusinessPill
-              label="All businesses"
-              active={scopedBizId === undefined}
-              onClick={() => setScopedBizId(undefined)}
-            />
-            {businesses.map((b) => (
-              <BusinessPill
-                key={b.id}
-                label={b.name}
-                active={scopedBizId === b.id}
-                onClick={() => setScopedBizId(b.id)}
+    <AppShell breadcrumbs={["Helm", "Chat"]}>
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto scroll-paper">
+          <div className="max-w-3xl mx-auto px-8 py-8 flex flex-col gap-5">
+            {parts.length === 0 && !pending && (
+              <EmptyChat
+                onPick={(prompt) => setInput(prompt)}
+                hasBusinesses={businesses.length > 0}
               />
+            )}
+            {parts.map((part, i) => (
+              <TurnPartView key={i} part={part} onApproval={respond} />
             ))}
+            {pending && (
+              <div className="max-w-2xl text-[15px] leading-relaxed whitespace-pre-wrap text-ink">
+                {pending}
+                <span className="inline-block w-1 h-4 bg-ink/60 align-middle ml-0.5 animate-pulse" />
+              </div>
+            )}
+            {error && <div className="text-sm text-rose-2">{error}</div>}
           </div>
-        ) : null}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void send();
-          }}
-          className="flex gap-2"
-        >
-          <input
-            className="flex-1 rounded-md border border-iron/30 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/60"
-            placeholder={busy ? "working…" : "Tell the CEO Agent what to do"}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={busy}
-            autoFocus
-          />
-          <Button type="submit" disabled={busy || input.trim().length === 0}>
-            Send
-          </Button>
-        </form>
-      </footer>
-    </div>
+        </div>
+
+        <div className="border-t border-rule bg-paper-2">
+          <div className="max-w-3xl mx-auto px-8 py-4 space-y-3">
+            {businesses.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                <BusinessPill
+                  label="All businesses"
+                  active={scopedBizId === undefined}
+                  onClick={() => setScopedBizId(undefined)}
+                />
+                {businesses.map((b) => (
+                  <BusinessPill
+                    key={b.id}
+                    label={b.name}
+                    active={scopedBizId === b.id}
+                    onClick={() => setScopedBizId(b.id)}
+                  />
+                ))}
+              </div>
+            ) : null}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send();
+              }}
+              className="flex gap-2"
+            >
+              <input
+                className="flex-1 rounded-sm border border-rule bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:border-ink-2 disabled:opacity-50"
+                placeholder={busy ? "Atlas is thinking…" : "Tell the CEO Agent what to do"}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={busy}
+                autoFocus
+              />
+              <Button type="submit" disabled={busy || input.trim().length === 0} size="lg">
+                <Icon name="send" size={13} /> Send
+              </Button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </AppShell>
   );
 }
 
@@ -193,15 +201,18 @@ function EmptyChat({
 }) {
   const prompts = hasBusinesses ? STARTER_PROMPTS_RETURNING : STARTER_PROMPTS_NEW;
   return (
-    <div className="mt-16 space-y-6">
-      <div className="text-center">
-        <div className="text-xs font-semibold tracking-widest text-iron uppercase mb-2">
-          {hasBusinesses ? "Where to next" : "Welcome to Helm"}
+    <div className="mt-10 space-y-7">
+      <div className="text-center space-y-3">
+        <div className="mx-auto h-14 w-14 grid place-items-center rounded-full bg-gradient-to-br from-terracotta to-amber text-paper font-serif text-[28px] leading-none">
+          A
         </div>
-        <p className="text-sm text-iron">
+        <h1 className="font-serif text-[36px] leading-tight tracking-tightest">
+          {hasBusinesses ? "What's on your mind?" : "Tell Atlas what to build."}
+        </h1>
+        <p className="text-sm text-ink-3 max-w-md mx-auto">
           {hasBusinesses
-            ? "Ask the CEO Agent anything — or pick a starter."
-            : "Tell the CEO Agent what you want to build. It delegates to the right specialist."}
+            ? "Ask Atlas anything about your portfolio — or pick a starter."
+            : "Atlas delegates to the right specialist and comes back with a plan."}
         </p>
       </div>
       <div className="grid gap-2 max-w-xl mx-auto">
@@ -210,9 +221,9 @@ function EmptyChat({
             key={p}
             type="button"
             onClick={() => onPick(p)}
-            className="text-left p-4 rounded-lg border border-iron/20 bg-haze/40 dark:bg-ink/20 hover:border-accent/60 transition-colors"
+            className="text-left p-4 rounded-md border border-rule bg-paper hover:bg-sand transition-colors"
           >
-            <span className="text-sm">{p}</span>
+            <span className="text-sm text-ink">{p}</span>
           </button>
         ))}
       </div>
@@ -236,8 +247,8 @@ function BusinessPill({
       className={cn(
         "px-3 py-1 rounded-full text-xs font-medium transition-colors",
         active
-          ? "bg-ink text-paper dark:bg-paper dark:text-ink"
-          : "bg-haze text-iron border border-iron/20 hover:text-ink",
+          ? "bg-ink text-paper"
+          : "bg-paper text-ink-2 border border-rule hover:bg-sand hover:text-ink",
       )}
     >
       {label}
@@ -259,7 +270,7 @@ function TurnPartView({
   if (part.kind === "user") {
     return (
       <div className="flex justify-end">
-        <div className="rounded-lg bg-ink text-paper dark:bg-paper dark:text-ink px-4 py-2 text-sm max-w-2xl">
+        <div className="rounded-[14px] rounded-br-[4px] bg-ink text-paper px-4 py-2.5 text-[14px] leading-relaxed max-w-2xl">
           {part.text}
         </div>
       </div>
@@ -268,9 +279,11 @@ function TurnPartView({
   if (part.kind === "agent") {
     return (
       <div className="max-w-2xl">
-        <div className="text-sm leading-relaxed whitespace-pre-wrap">{part.text}</div>
+        <div className="rounded-[14px] rounded-bl-[4px] bg-sand text-ink px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap">
+          {part.text}
+        </div>
         {part.toolCalls.length || part.costCents > 0 ? (
-          <div className="mt-2 flex flex-wrap gap-3 text-xs text-iron font-mono">
+          <div className="mt-1.5 ml-1 flex flex-wrap gap-3 text-[11px] text-ink-3 font-mono">
             {part.toolCalls.length ? <span>tools: {part.toolCalls.join(", ")}</span> : null}
             {part.costCents > 0 ? <span>cost: {part.costCents}¢</span> : null}
           </div>
@@ -279,9 +292,9 @@ function TurnPartView({
     );
   }
   if (part.kind === "tool") {
-    const color = part.ok ? "text-iron" : "text-danger";
+    const color = part.ok ? "text-ink-3" : "text-rose-2";
     return (
-      <div className={`text-xs ${color} font-mono`}>
+      <div className={`text-xs ${color} font-mono ml-1`}>
         {part.ok ? "✓" : "✗"} {part.name}
       </div>
     );

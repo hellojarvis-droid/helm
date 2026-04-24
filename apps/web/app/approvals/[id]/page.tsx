@@ -2,21 +2,23 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { Nav } from "@/components/Nav";
+import { AppShell } from "@/components/AppShell";
+import { ApprovalWhy } from "@/components/chat/ApprovalWhy";
 import { Button } from "@/components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { cn } from "@/lib/cn";
 import { type Approval, getApproval, respondToApproval } from "@/lib/api";
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-const STATUS_TINT: Record<string, string> = {
-  pending: "text-warning",
-  approved: "text-success",
-  modified: "text-accent",
-  denied: "text-danger",
-  expired: "text-iron",
+const STATUS_CHIP: Record<string, string> = {
+  pending: "chip-terra",
+  approved: "chip-sage",
+  modified: "chip-terra",
+  denied: "chip-rose",
+  expired: "",
 };
 
 export default function ApprovalDetailPage({ params }: PageProps) {
@@ -49,26 +51,24 @@ export default function ApprovalDetailPage({ params }: PageProps) {
 
   if (error && !approval) {
     return (
-      <div className="min-h-screen">
-        <Nav />
-        <main className="max-w-3xl mx-auto px-6 py-8 space-y-4">
-          <p className="text-sm text-danger">{error}</p>
-          <Link href={{ pathname: "/approvals" }} className="text-sm text-iron">
+      <AppShell breadcrumbs={["Helm", "Approvals", "Detail"]}>
+        <div className="px-10 py-8 max-w-3xl space-y-4">
+          <p className="text-sm text-rose-2">{error}</p>
+          <Link href="/approvals" className="text-sm text-ink-3 hover:text-ink">
             ← All approvals
           </Link>
-        </main>
-      </div>
+        </div>
+      </AppShell>
     );
   }
 
   if (!approval) {
     return (
-      <div className="min-h-screen">
-        <Nav />
-        <main className="max-w-3xl mx-auto px-6 py-8">
-          <p className="text-sm text-iron">Loading…</p>
-        </main>
-      </div>
+      <AppShell breadcrumbs={["Helm", "Approvals", "Detail"]}>
+        <div className="px-10 py-8">
+          <p className="text-sm text-ink-3">Loading…</p>
+        </div>
+      </AppShell>
     );
   }
 
@@ -86,23 +86,26 @@ export default function ApprovalDetailPage({ params }: PageProps) {
   const requested = new Date(approval.requested_at).toLocaleString();
   const responded = approval.responded_at ? new Date(approval.responded_at).toLocaleString() : null;
   const expires = new Date(approval.expires_at).toLocaleString();
-  const tint = STATUS_TINT[approval.status] ?? "text-iron";
+  const chipClass = STATUS_CHIP[approval.status] ?? "";
 
   return (
-    <div className="min-h-screen">
-      <Nav />
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+    <AppShell breadcrumbs={["Helm", "Approvals", approval.summary.slice(0, 24) + "…"]}>
+      <div className="px-10 pt-8 pb-20 max-w-3xl space-y-6">
         <header>
-          <div className={`text-xs font-semibold tracking-widest uppercase mb-1 ${tint}`}>
+          <span className={cn("chip mb-3", chipClass)}>
             {isSpend ? "Spend approval" : approval.kind} · {approval.status}
-          </div>
+          </span>
           {isSpend ? (
-            <div className="flex items-baseline gap-3">
-              <h1 className="text-4xl font-semibold tabular">${(amountCents / 100).toFixed(2)}</h1>
-              {merchant ? <span className="text-sm text-iron">to {merchant}</span> : null}
+            <div className="flex items-baseline gap-3 mt-2">
+              <h1 className="font-serif text-[54px] leading-none tracking-tightest tabular">
+                ${(amountCents / 100).toFixed(2)}
+              </h1>
+              {merchant ? <span className="text-sm text-ink-3">to {merchant}</span> : null}
             </div>
           ) : (
-            <h1 className="text-2xl font-semibold tracking-tight">{approval.summary}</h1>
+            <h1 className="font-serif text-[36px] leading-tight tracking-tightest mt-2">
+              {approval.summary}
+            </h1>
           )}
         </header>
 
@@ -111,7 +114,7 @@ export default function ApprovalDetailPage({ params }: PageProps) {
             <CardHeader>
               <CardTitle>Why</CardTitle>
             </CardHeader>
-            <p className="text-sm leading-relaxed">{purpose}</p>
+            <p className="text-sm leading-relaxed text-ink">{purpose}</p>
           </Card>
         ) : null}
 
@@ -119,7 +122,8 @@ export default function ApprovalDetailPage({ params }: PageProps) {
           <CardHeader>
             <CardTitle>Summary</CardTitle>
           </CardHeader>
-          <p className="text-sm leading-relaxed">{approval.summary}</p>
+          <p className="text-sm leading-relaxed text-ink">{approval.summary}</p>
+          <ApprovalWhy approvalId={approval.id} variant="prominent" />
         </Card>
 
         <Card>
@@ -127,18 +131,18 @@ export default function ApprovalDetailPage({ params }: PageProps) {
             <CardTitle>Timing</CardTitle>
           </CardHeader>
           <dl className="text-sm space-y-1">
-            <div className="flex justify-between">
-              <dt className="text-iron">Requested</dt>
-              <dd className="tabular">{requested}</dd>
+            <div className="flex justify-between py-1 border-b border-rule last:border-b-0">
+              <dt className="text-ink-3">Requested</dt>
+              <dd className="font-mono text-xs">{requested}</dd>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-iron">Expires</dt>
-              <dd className="tabular">{expires}</dd>
+            <div className="flex justify-between py-1 border-b border-rule last:border-b-0">
+              <dt className="text-ink-3">Expires</dt>
+              <dd className="font-mono text-xs">{expires}</dd>
             </div>
             {responded ? (
-              <div className="flex justify-between">
-                <dt className="text-iron">Responded</dt>
-                <dd className="tabular">{responded}</dd>
+              <div className="flex justify-between py-1 border-b border-rule last:border-b-0">
+                <dt className="text-ink-3">Responded</dt>
+                <dd className="font-mono text-xs">{responded}</dd>
               </div>
             ) : null}
           </dl>
@@ -152,7 +156,7 @@ export default function ApprovalDetailPage({ params }: PageProps) {
               after you respond lives here.
             </CardDescription>
           </CardHeader>
-          <pre className="text-xs bg-haze/40 dark:bg-ink/40 p-4 rounded-md overflow-x-auto font-mono">
+          <pre className="text-xs bg-paper-2 p-4 rounded-sm overflow-x-auto font-mono border border-rule text-ink-2">
             {JSON.stringify(approval.details, null, 2)}
           </pre>
         </Card>
@@ -177,15 +181,12 @@ export default function ApprovalDetailPage({ params }: PageProps) {
           </div>
         ) : null}
 
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {error ? <p className="text-sm text-rose-2">{error}</p> : null}
 
-        <Link
-          href={{ pathname: "/approvals" }}
-          className="inline-block text-sm text-iron hover:text-ink dark:hover:text-paper"
-        >
+        <Link href="/approvals" className="inline-block text-sm text-ink-3 hover:text-ink">
           ← All approvals
         </Link>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

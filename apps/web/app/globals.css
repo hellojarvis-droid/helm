@@ -4,24 +4,161 @@
 
 @layer base {
   :root {
-    color-scheme: light dark;
+    color-scheme: light;
+    /* Warm paper — single, restful palette (oklch, faithful to the
+     * handoff). All tokens are referenced from tailwind.config.ts as
+     * oklch(from var(--x) ...), so alpha modifiers keep working. */
+    --paper: oklch(0.985 0.008 85);
+    --paper-2: oklch(0.965 0.012 82);
+    --sand: oklch(0.935 0.018 80);
+    --sand-2: oklch(0.895 0.022 78);
+    --rule: oklch(0.86 0.02 78);
+    --ink: oklch(0.26 0.02 60);
+    --ink-2: oklch(0.42 0.02 65);
+    --ink-3: oklch(0.58 0.018 70);
+    --terracotta: oklch(0.64 0.09 45);
+    --terracotta-2: oklch(0.55 0.1 42);
+    --terracotta-soft: oklch(0.92 0.03 55);
+    --sage: oklch(0.66 0.055 145);
+    --sage-2: oklch(0.5 0.06 145);
+    --sage-soft: oklch(0.93 0.025 140);
+    --amber: oklch(0.78 0.09 80);
+    --amber-2: oklch(0.5 0.08 70);
+    --amber-soft: oklch(0.94 0.04 85);
+    --rose: oklch(0.7 0.07 25);
+    --rose-2: oklch(0.5 0.08 25);
+    --rose-soft: oklch(0.94 0.03 25);
   }
+
   html,
   body {
-    background: theme("colors.paper");
-    color: theme("colors.ink");
-    font-family: theme("fontFamily.sans");
-    font-feature-settings: "cv11", "ss01";
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
   }
-  @media (prefers-color-scheme: dark) {
-    html,
-    body {
-      background: theme("colors.ink");
-      color: theme("colors.paper");
-    }
+
+  .font-serif {
+    letter-spacing: -0.01em;
   }
-  /* Tabular numerals so dollar amounts don't jump as they stream. */
+
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* Paper-grain overlay — a subtle textile feel for main scroll panels.
+   * Applied on an element; children sit above via their own stacking. */
+  .paper-grain {
+    position: relative;
+  }
+  .paper-grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(oklch(0.5 0.02 70 / 0.04) 1px, transparent 1px);
+    background-size: 3px 3px;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    opacity: 0.6;
+    z-index: 0;
+  }
+  .paper-grain > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Chip — small uppercase pill used in card headers and list items. */
+  .chip {
+    display: inline-block;
+    white-space: nowrap;
+    font-size: 10px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--sand);
+    color: var(--ink-2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .chip-sage {
+    background: var(--sage-soft);
+    color: var(--sage-2);
+  }
+  .chip-terra {
+    background: var(--terracotta-soft);
+    color: var(--terracotta-2);
+  }
+  .chip-amber {
+    background: var(--amber-soft);
+    color: var(--amber-2);
+  }
+  .chip-rose {
+    background: var(--rose-soft);
+    color: var(--rose-2);
+  }
+
+  /* Kbd — keyboard hint shown in search chips etc. */
+  kbd {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 10.5px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    color: var(--ink-2);
+  }
+
+  /* Scroll surfaces — warm scrollbar that reads as part of the paper. */
+  .scroll-paper::-webkit-scrollbar {
+    width: 10px;
+  }
+  .scroll-paper::-webkit-scrollbar-thumb {
+    background: var(--sand-2);
+    border-radius: 10px;
+    border: 2px solid var(--paper);
+  }
+
+  /* Typing indicator used by the Atlas chat dock. */
+  .typing span {
+    display: inline-block;
+    animation: tblink 1.2s infinite;
+  }
+  .typing span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  .typing span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+  @keyframes tblink {
+    0%,
+    100% {
+      opacity: 0.2;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* Hatched placeholder used by render queue tiles. */
+  .ph {
+    background: repeating-linear-gradient(
+      45deg,
+      var(--sand) 0 6px,
+      var(--sand-2) 6px 7px
+    );
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    color: var(--ink-3);
+    font-family: var(--font-mono), monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    min-height: 120px;
   }
 }

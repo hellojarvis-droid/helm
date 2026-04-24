@@ -1,5 +1,6 @@
 "use client";
 
+import { ApprovalWhy } from "@/components/chat/ApprovalWhy";
 import { Button } from "@/components/ui/Button";
 
 interface ApprovalCardProps {
@@ -30,14 +31,12 @@ function GenericApprovalCard({
 }: ApprovalCardProps) {
   const expires = formatExpires(expires_at);
   return (
-    <div className="rounded-lg border border-accent/40 bg-accent/5 p-5 my-3 max-w-2xl">
+    <div className="rounded-md border border-terracotta/50 bg-terracotta-soft/50 p-5 my-2 max-w-2xl">
       <div className="flex items-start justify-between mb-2">
-        <div className="text-xs uppercase tracking-wider text-accent font-semibold">
-          Approval · {approval_kind}
-        </div>
-        <div className="text-xs text-iron">expires {expires}</div>
+        <div className="chip chip-terra">Approval · {approval_kind}</div>
+        <div className="text-xs text-ink-3">expires {expires}</div>
       </div>
-      <p className="text-sm leading-relaxed mb-4">{summary}</p>
+      <p className="text-sm leading-relaxed mb-4 text-ink">{summary}</p>
       <div className="flex gap-2">
         <Button
           variant="accent"
@@ -56,6 +55,7 @@ function GenericApprovalCard({
           Deny
         </Button>
       </div>
+      <ApprovalWhy approvalId={approval_id} />
     </div>
   );
 }
@@ -74,29 +74,27 @@ function SpendApprovalCard({
   const expires = formatExpires(expires_at);
 
   return (
-    <div className="rounded-lg border-2 border-accent bg-accent/5 p-5 my-3 max-w-2xl">
+    <div className="rounded-md border-2 border-terracotta bg-terracotta-soft/40 p-5 my-2 max-w-2xl">
       <div className="flex items-baseline justify-between mb-3">
-        <div className="text-xs uppercase tracking-wider text-accent font-semibold">
-          Spend approval
-        </div>
-        <div className="text-xs text-iron">expires {expires}</div>
+        <div className="chip chip-terra">Spend approval</div>
+        <div className="text-xs text-ink-3">expires {expires}</div>
       </div>
 
       <div className="flex items-baseline gap-3 mb-3">
-        <span className="text-4xl font-semibold tabular text-ink dark:text-paper">
+        <span className="font-serif text-[40px] leading-none tracking-tightest tabular text-ink">
           ${(amountCents / 100).toFixed(2)}
         </span>
-        {merchant ? <span className="text-sm text-iron">to {merchant}</span> : null}
+        {merchant ? <span className="text-sm text-ink-3">to {merchant}</span> : null}
       </div>
 
       {purpose ? (
-        <div className="text-sm leading-relaxed mb-2">
-          <span className="text-iron">Why: </span>
+        <div className="text-sm leading-relaxed mb-2 text-ink-2">
+          <span className="text-ink-3">Why: </span>
           {purpose}
         </div>
       ) : null}
 
-      <p className="text-xs text-iron leading-relaxed mb-4">{summary}</p>
+      <p className="text-xs text-ink-3 leading-relaxed mb-4">{summary}</p>
 
       <div className="flex flex-wrap gap-2">
         <Button
@@ -122,6 +120,7 @@ function SpendApprovalCard({
           Deny
         </Button>
       </div>
+      <ApprovalWhy approvalId={approval_id} />
     </div>
   );
 }

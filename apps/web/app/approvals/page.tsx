@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Nav } from "@/components/Nav";
+import { AppShell } from "@/components/AppShell";
+import { ApprovalWhy } from "@/components/chat/ApprovalWhy";
+import { Icon } from "@/components/design/Icon";
 import { Button } from "@/components/ui/Button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
 import { type Approval, listApprovals, respondToApproval } from "@/lib/api";
 
@@ -47,23 +48,27 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      <Nav />
-      <main className="max-w-3xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-semibold tracking-tight">Approvals</h1>
+    <AppShell breadcrumbs={["Helm", "Approvals"]}>
+      <div className="px-10 pt-8 pb-20 max-w-4xl">
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            <h1 className="font-serif text-[44px] leading-none tracking-tightest mb-2">
+              Approvals
+            </h1>
+            <p className="text-sm text-ink-3">
+              Every action the swarm wants your sign-off on. Big spend, publishing, data deletes.
+            </p>
+          </div>
         </div>
 
-        <div className="flex gap-1 border-b border-iron/20 mb-4">
+        <div className="inline-flex gap-0.5 p-[3px] bg-sand rounded-[8px] mb-6">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={cn(
-                "px-4 py-2 text-sm border-b-2 transition-colors -mb-px",
-                tab === t.key
-                  ? "border-accent text-ink dark:text-paper"
-                  : "border-transparent text-iron hover:text-ink dark:hover:text-paper",
+                "px-3.5 py-1.5 text-[12.5px] rounded-[6px]",
+                tab === t.key ? "bg-paper text-ink shadow-sm" : "text-ink-3 hover:text-ink",
               )}
             >
               {t.label}
@@ -71,21 +76,19 @@ export default function ApprovalsPage() {
           ))}
         </div>
 
-        {error && <p className="text-sm text-danger mb-4">{error}</p>}
+        {error && <p className="text-sm text-rose-2 mb-4">{error}</p>}
 
         {rows === null ? (
-          <p className="text-sm text-iron">Loading…</p>
+          <p className="text-sm text-ink-3">Loading…</p>
         ) : rows.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Nothing here</CardTitle>
-              <CardDescription>
-                {tab === "pending"
-                  ? "No approvals waiting on you. The agent is either idling or already executing approved work."
-                  : `No ${tab} approvals yet.`}
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="rounded-md border border-rule bg-paper p-8 max-w-xl">
+            <div className="font-serif text-[22px] leading-tight mb-2">Nothing here.</div>
+            <p className="text-sm text-ink-3">
+              {tab === "pending"
+                ? "No approvals waiting on you. The agent is either idling or already executing approved work."
+                : `No ${tab} approvals yet.`}
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {rows.map((a) => (
@@ -93,8 +96,8 @@ export default function ApprovalsPage() {
             ))}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 
@@ -124,11 +127,6 @@ function ApprovalRow({
     approval.kind === "spend" &&
     typeof approval.details?.amount_cents === "number" &&
     (approval.details.amount_cents as number) > 0;
-  const borderClass = pending
-    ? isSpend
-      ? "border-accent border-2 bg-accent/5"
-      : "border-accent/40 bg-accent/5"
-    : "border-iron/20 bg-haze/40 dark:bg-ink/40";
 
   const amountCents = isSpend ? (approval.details.amount_cents as number) : 0;
   const merchant =
@@ -138,14 +136,19 @@ function ApprovalRow({
   const purpose =
     typeof approval.details?.purpose === "string" ? (approval.details.purpose as string) : "";
 
+  const borderClass = pending
+    ? isSpend
+      ? "border-terracotta border-2 bg-terracotta-soft/30"
+      : "border-terracotta/50 bg-terracotta-soft/20"
+    : "border-rule bg-paper";
+
   return (
-    <div className={cn("rounded-lg border p-5", borderClass)}>
-      <div className="flex items-start justify-between mb-2">
-        <div className="text-xs uppercase tracking-wider font-semibold">
-          {isSpend ? "Spend approval" : approval.kind} ·{" "}
-          <span className="text-iron">{approval.status}</span>
-        </div>
-        <div className="text-xs text-iron text-right">
+    <div className={cn("rounded-md border p-6", borderClass)}>
+      <div className="flex items-start justify-between mb-3">
+        <span className={cn("chip", pending ? "chip-terra" : "")}>
+          {isSpend ? "Spend approval" : approval.kind} · {approval.status}
+        </span>
+        <div className="text-xs text-ink-3 text-right font-mono">
           <div>requested {requested}</div>
           {pending && <div>expires {expires}</div>}
         </div>
@@ -154,21 +157,21 @@ function ApprovalRow({
       {isSpend ? (
         <>
           <div className="flex items-baseline gap-3 mb-3">
-            <span className="text-4xl font-semibold tabular">
+            <span className="font-serif text-[44px] leading-none tracking-tightest tabular">
               ${(amountCents / 100).toFixed(2)}
             </span>
-            {merchant ? <span className="text-sm text-iron">to {merchant}</span> : null}
+            {merchant ? <span className="text-sm text-ink-3">to {merchant}</span> : null}
           </div>
           {purpose ? (
-            <div className="text-sm leading-relaxed mb-2">
-              <span className="text-iron">Why: </span>
+            <div className="text-sm leading-relaxed mb-3 text-ink-2">
+              <span className="text-ink-3">Why: </span>
               {purpose}
             </div>
           ) : null}
-          <p className="text-xs text-iron leading-relaxed mb-4">{approval.summary}</p>
+          <p className="text-xs text-ink-3 leading-relaxed mb-4">{approval.summary}</p>
         </>
       ) : (
-        <p className="text-sm leading-relaxed mb-4">{approval.summary}</p>
+        <p className="text-sm leading-relaxed mb-4 text-ink">{approval.summary}</p>
       )}
 
       {pending && (
@@ -214,12 +217,15 @@ function ApprovalRow({
           </Button>
         </div>
       )}
-      <Link
-        href={`/approvals/${approval.id}` as never}
-        className="inline-block mt-3 text-xs text-iron hover:text-ink dark:hover:text-paper"
-      >
-        Open detail →
-      </Link>
+      <div className="flex items-center gap-4 mt-3">
+        <Link
+          href={`/approvals/${approval.id}`}
+          className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink"
+        >
+          Open detail <Icon name="arrowUp" size={10} className="rotate-90" />
+        </Link>
+      </div>
+      <ApprovalWhy approvalId={approval.id} />
     </div>
   );
 }

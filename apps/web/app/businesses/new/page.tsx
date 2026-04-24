@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Nav } from "@/components/Nav";
+import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createBusiness } from "@/lib/api";
@@ -41,14 +41,25 @@ export default function NewBusinessPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      <Nav />
-      <main className="max-w-md mx-auto px-6 py-8">
-        <h1 className="text-xl font-semibold tracking-tight mb-6">New business</h1>
+    <AppShell breadcrumbs={["Helm", "Businesses", "New"]}>
+      <div className="max-w-lg mx-auto px-8 py-12">
+        <div className="mb-8">
+          <div className="text-[12px] text-ink-3 tracking-[0.08em] uppercase mb-2">
+            New venture
+          </div>
+          <h1 className="font-serif text-[36px] leading-tight tracking-tightest mb-2">
+            What are you bringing to market?
+          </h1>
+          <p className="text-sm text-ink-3">
+            Name it, pick a vertical, set a weekly cap. Atlas takes it from here.
+          </p>
+        </div>
 
-        <form onSubmit={submit} className="space-y-5">
+        <form onSubmit={submit} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-sm">Name</label>
+            <label className="text-[11px] uppercase tracking-[0.06em] text-ink-3 font-medium">
+              Name
+            </label>
             <Input
               required
               minLength={1}
@@ -60,9 +71,11 @@ export default function NewBusinessPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm">Vertical</label>
+            <label className="text-[11px] uppercase tracking-[0.06em] text-ink-3 font-medium">
+              Vertical
+            </label>
             <select
-              className="flex h-10 w-full rounded-md border border-iron/30 bg-transparent px-3 py-2 text-sm"
+              className="flex h-10 w-full rounded-sm border border-rule bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:border-ink-2"
               value={vertical}
               onChange={(e) => setVertical(e.target.value)}
             >
@@ -75,10 +88,12 @@ export default function NewBusinessPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm flex items-center justify-between">
-              <span>Weekly spend cap</span>
-              <span className="tabular text-iron">${cap}/wk</span>
-            </label>
+            <div className="flex items-baseline justify-between">
+              <label className="text-[11px] uppercase tracking-[0.06em] text-ink-3 font-medium">
+                Weekly spend cap
+              </label>
+              <span className="font-serif text-[22px] tabular">${cap}</span>
+            </div>
             <input
               type="range"
               min={50}
@@ -86,25 +101,31 @@ export default function NewBusinessPage() {
               step={50}
               value={cap}
               onChange={(e) => setCap(Number(e.target.value))}
-              className="w-full accent-[var(--tw-accent,theme(colors.accent))]"
+              className="w-full accent-terracotta"
             />
-            <p className="text-xs text-iron">
-              The Stripe-issued card will refuse any spend that would push weekly total past this.
+            <p className="text-xs text-ink-3">
+              The Stripe-issued card refuses any spend that would push the weekly total past this.
             </p>
           </div>
 
-          {err && <p className="text-sm text-danger">{err}</p>}
+          {err && <p className="text-sm text-rose-2">{err}</p>}
 
-          <div className="flex gap-2">
-            <Button type="submit" disabled={busy || !name.trim()}>
-              {busy ? "Creating…" : "Create"}
+          <div className="flex gap-2 pt-2">
+            <Button type="submit" variant="accent" size="lg" disabled={busy || !name.trim()}>
+              {busy ? "Creating…" : "Launch venture"}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => router.back()} disabled={busy}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              onClick={() => router.back()}
+              disabled={busy}
+            >
               Cancel
             </Button>
           </div>
         </form>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

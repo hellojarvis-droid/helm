@@ -38,6 +38,9 @@ function usePendingApprovalCount(): number | undefined {
   return count;
 }
 
+// Tab order puts Chat first — Helm's product promise is Dispatch-style,
+// one persistent thread with the CEO Agent as the primary surface.
+// Today/Businesses/Approvals/Safety are secondary drill-downs.
 export default function TabsLayout() {
   const pending = usePendingApprovalCount();
 
@@ -45,15 +48,17 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.ink,
-        tabBarInactiveTintColor: colors.iron,
+        tabBarInactiveTintColor: colors.ink3,
         headerStyle: { backgroundColor: colors.paper },
         headerTintColor: colors.ink,
-        tabBarStyle: { backgroundColor: colors.paper, borderTopColor: "rgba(107,107,107,0.2)" },
+        tabBarStyle: {
+          backgroundColor: colors.paper,
+          borderTopColor: colors.rule,
+        },
       }}
     >
+      <Tabs.Screen name="chat" options={{ title: "Atlas", tabBarLabel: "Atlas" }} />
       <Tabs.Screen name="today" options={{ title: "Today", tabBarLabel: "Today" }} />
-      <Tabs.Screen name="chat" options={{ title: "Chat", tabBarLabel: "Chat" }} />
-      <Tabs.Screen name="businesses" options={{ title: "Businesses", tabBarLabel: "Businesses" }} />
       <Tabs.Screen
         name="approvals"
         options={{
@@ -61,13 +66,14 @@ export default function TabsLayout() {
           tabBarLabel: "Approvals",
           tabBarBadge: pending,
           tabBarBadgeStyle: {
-            backgroundColor: colors.accent,
+            backgroundColor: colors.terracotta,
             color: colors.paper,
             fontSize: 11,
             fontWeight: "600",
           },
         }}
       />
+      <Tabs.Screen name="businesses" options={{ title: "Businesses", tabBarLabel: "Businesses" }} />
       <Tabs.Screen name="safety" options={{ title: "Safety", tabBarLabel: "Safety" }} />
     </Tabs>
   );

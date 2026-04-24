@@ -21,23 +21,28 @@ const SUBPROCESSORS = [
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <header className="flex items-center justify-between px-6 py-4 max-w-4xl mx-auto">
-        <Link href={{ pathname: "/" }} className="text-lg font-semibold tracking-tight">
-          Helm
+    <div className="min-h-screen bg-paper text-ink paper-grain">
+      <header className="flex items-center justify-between px-8 py-5 max-w-4xl mx-auto">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="h-8 w-8 grid place-items-center rounded-md bg-ink text-paper font-serif text-[22px] leading-none">
+            H
+          </div>
+          <span className="text-[18px] font-semibold tracking-tight">Helm</span>
         </Link>
-        <Link href={{ pathname: "/sign-in" }} className="text-sm text-iron hover:text-ink">
+        <Link href="/sign-in" className="text-sm text-ink-2 hover:text-ink">
           Sign in
         </Link>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-10 space-y-8">
+      <main className="max-w-3xl mx-auto px-8 py-14 space-y-10">
         <header>
-          <div className="text-xs font-semibold tracking-widest text-iron uppercase mb-2">
+          <div className="text-[11px] font-medium tracking-[0.08em] text-ink-3 uppercase mb-3">
             Legal · Last updated 2026-04-18
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight">Privacy policy</h1>
-          <p className="text-sm text-iron mt-3 max-w-prose">
+          <h1 className="font-serif text-[44px] leading-tight tracking-tightest">
+            Privacy policy
+          </h1>
+          <p className="text-sm text-ink-2 mt-4 max-w-prose leading-relaxed">
             What we collect, why, who else touches it. Plain English. The lawyer-reviewed formal
             policy lands before public launch and replaces this document.
           </p>
@@ -88,9 +93,12 @@ export default function PrivacyPage() {
           </p>
           <ul className="space-y-1 mt-3">
             {SUBPROCESSORS.map((s) => (
-              <li key={s.name} className="flex justify-between gap-4 text-sm">
+              <li
+                key={s.name}
+                className="flex justify-between gap-4 text-sm py-2 border-b border-rule last:border-b-0"
+              >
                 <span className="font-medium text-ink">{s.name}</span>
-                <span className="text-right">{s.role}</span>
+                <span className="text-right text-ink-2">{s.role}</span>
               </li>
             ))}
           </ul>
@@ -115,18 +123,24 @@ export default function PrivacyPage() {
 
         <Section title="Contact">
           <p>
-            <a className="underline" href="mailto:privacy@helm.app">
+            <a
+              className="underline text-terracotta-2 hover:text-terracotta"
+              href="mailto:privacy@helm.app"
+            >
               privacy@helm.app
             </a>{" "}
             for data requests;{" "}
-            <a className="underline" href="mailto:hello@helm.app">
+            <a
+              className="underline text-terracotta-2 hover:text-terracotta"
+              href="mailto:hello@helm.app"
+            >
               hello@helm.app
             </a>{" "}
             for everything else.
           </p>
         </Section>
 
-        <Footer />
+        <FooterLinks />
       </main>
     </div>
   );
@@ -136,21 +150,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section>
       <h2 className="text-base font-semibold mb-3">{title}</h2>
-      <div className="text-sm leading-relaxed text-iron space-y-3">{children}</div>
+      <div className="text-sm leading-relaxed text-ink-2 space-y-3">{children}</div>
     </section>
   );
 }
 
-function Footer() {
+function FooterLinks() {
   return (
-    <footer className="pt-10 mt-10 border-t border-iron/10 text-xs text-iron flex gap-4">
-      <Link href={{ pathname: "/" }} className="hover:text-ink">
+    <footer className="pt-10 mt-10 border-t border-rule text-xs text-ink-3 flex gap-4">
+      <Link href="/" className="hover:text-ink">
         ← Helm
       </Link>
-      <Link href={{ pathname: "/terms" }} className="hover:text-ink">
+      <Link href="/terms" className="hover:text-ink">
         Terms
       </Link>
-      <Link href={{ pathname: "/pricing" }} className="hover:text-ink">
+      <Link href="/pricing" className="hover:text-ink">
         Pricing
       </Link>
     </footer>

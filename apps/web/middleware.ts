@@ -6,7 +6,20 @@ import { updateSession } from "@/lib/supabase/middleware";
  * - Redirects unauthenticated users away from protected routes.
  * - Redirects signed-in users away from auth routes.
  */
-const PROTECTED = ["/today", "/chat", "/businesses", "/approvals", "/safety", "/billing"];
+const PROTECTED = [
+  "/today",
+  "/chat",
+  "/businesses",
+  "/approvals",
+  "/safety",
+  "/billing",
+  "/agents",
+  "/events",
+  "/money",
+  "/onboarding",
+  "/connections",
+  "/studio",
+];
 const AUTH_ROUTES = ["/sign-in", "/sign-up"];
 
 export async function middleware(request: NextRequest) {

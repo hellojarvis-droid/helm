@@ -71,7 +71,21 @@ export function ActivityFeed({ businessId }: { businessId: string }) {
       try {
         const rows = await listEvents(businessId, { limit: PAGE_SIZE, beforeId });
         if (rows.length < PAGE_SIZE) setReachedEnd(true);
-        setEvents((prev) => (prev ? [...prev, ...rows] : rows));
+        // Only append when the caller is paginating (beforeId defined). Initial
+        // loads replace — React strict mode runs effects twice in dev, and
+        // without this guard the second invocation duplicates every row.
+        // Defensive dedupe as well so any stray overlap (Fast Refresh replay,
+        // retries, or server race) never leaves two rows with the same key.
+        setEvents((prev) => {
+          const merged =
+            beforeId !== undefined && prev ? [...prev, ...rows] : rows;
+          const seen = new Set<number>();
+          return merged.filter((r) => {
+            if (seen.has(r.id)) return false;
+            seen.add(r.id);
+            return true;
+          });
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {

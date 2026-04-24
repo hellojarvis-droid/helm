@@ -71,51 +71,62 @@ const FAQ = [
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <header className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
-        <Link href={{ pathname: "/" }} className="text-lg font-semibold tracking-tight">
-          Helm
+    <div className="min-h-screen bg-paper text-ink paper-grain">
+      <header className="flex items-center justify-between px-8 py-5 max-w-6xl mx-auto">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="h-8 w-8 grid place-items-center rounded-md bg-ink text-paper font-serif text-[22px] leading-none">
+            H
+          </div>
+          <span className="text-[18px] font-semibold tracking-tight">Helm</span>
         </Link>
-        <Link href={{ pathname: "/sign-in" }}>
+        <Link href="/sign-in">
           <Button variant="accent">Get started</Button>
         </Link>
       </header>
 
-      <section className="max-w-3xl mx-auto px-6 py-16 text-center">
-        <div className="text-xs font-semibold tracking-widest text-accent uppercase mb-3">
+      <section className="max-w-3xl mx-auto px-8 py-20 text-center">
+        <div className="text-[11px] font-medium tracking-[0.12em] text-terracotta uppercase mb-6">
           Pricing
         </div>
-        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight mb-4">
-          Three tiers. Hard caps. No surprises.
+        <h1 className="font-serif text-5xl md:text-[64px] leading-[1.05] tracking-tightest mb-6">
+          Three tiers. Hard caps.
+          <br />
+          <em className="not-italic text-terracotta">No surprises.</em>
         </h1>
-        <p className="text-iron text-lg leading-relaxed max-w-2xl mx-auto">
+        <p className="text-ink-2 text-[17px] leading-relaxed max-w-2xl mx-auto">
           Every plan includes the full agent swarm, every specialist, every surface. Tiers gate how
           many businesses you run and how much agent compute is included.
         </p>
       </section>
 
-      <section className="max-w-5xl mx-auto px-6 pb-20 grid md:grid-cols-3 gap-6">
+      <section className="max-w-5xl mx-auto px-8 pb-20 grid md:grid-cols-3 gap-5">
         {TIERS.map((t) => (
           <div
             key={t.name}
-            className={`rounded-xl p-6 flex flex-col ${
+            className={
               t.highlighted
-                ? "bg-ink text-paper border-2 border-accent"
-                : "bg-haze/40 dark:bg-ink/20 border border-iron/20"
-            }`}
+                ? "rounded-md p-7 flex flex-col bg-ink text-paper border-2 border-terracotta"
+                : "rounded-md p-7 flex flex-col bg-paper border border-rule"
+            }
           >
-            <div className="text-xs font-semibold tracking-widest uppercase mb-2 opacity-80">
+            <div
+              className={`text-[11px] font-medium tracking-[0.08em] uppercase mb-3 ${t.highlighted ? "text-terracotta-soft" : "text-ink-3"}`}
+            >
               {t.name}
             </div>
-            <div className="mb-2">
-              <span className="text-3xl font-semibold tabular">{t.price}</span>
-              <span className="text-sm opacity-60">{t.cadence}</span>
+            <div className="mb-3">
+              <span className="font-serif text-[40px] tabular leading-none">{t.price}</span>
+              <span className={`text-sm ${t.highlighted ? "opacity-60" : "text-ink-3"} ml-1`}>
+                {t.cadence}
+              </span>
             </div>
-            <p className="text-sm opacity-80 mb-4">{t.summary}</p>
-            <ul className="text-sm space-y-2 mb-6 flex-1">
+            <p className={`text-sm mb-5 ${t.highlighted ? "opacity-80" : "text-ink-2"}`}>
+              {t.summary}
+            </p>
+            <ul className="text-sm space-y-2 mb-7 flex-1">
               {t.includes.map((line) => (
-                <li key={line} className="flex gap-2">
-                  <span className="text-accent">✓</span>
+                <li key={line} className="flex gap-2.5">
+                  <span className="text-terracotta">✓</span>
                   <span>{line}</span>
                 </li>
               ))}
@@ -123,7 +134,7 @@ export default function PricingPage() {
             {t.name === "Portfolio" ? (
               <a
                 href="mailto:hello@helm.app?subject=Portfolio%20tier%20inquiry"
-                className="inline-flex items-center justify-center h-11 px-5 rounded-md bg-accent text-paper text-sm font-medium hover:bg-accent/90"
+                className="inline-flex items-center justify-center h-11 px-5 rounded-sm bg-terracotta text-paper text-sm font-medium border border-terracotta hover:bg-terracotta-2"
               >
                 Talk to us
               </a>
@@ -133,11 +144,11 @@ export default function PricingPage() {
                   pathname: "/sign-in",
                   query: { upgrade: t.name.toLowerCase() },
                 }}
-                className={`inline-flex items-center justify-center h-11 px-5 rounded-md text-sm font-medium ${
+                className={
                   t.highlighted
-                    ? "bg-accent text-paper hover:bg-accent/90"
-                    : "bg-ink text-paper hover:bg-ink/90 dark:bg-paper dark:text-ink dark:hover:bg-paper/90"
-                }`}
+                    ? "inline-flex items-center justify-center h-11 px-5 rounded-sm bg-terracotta text-paper border border-terracotta hover:bg-terracotta-2 text-sm font-medium"
+                    : "inline-flex items-center justify-center h-11 px-5 rounded-sm bg-ink text-paper border border-ink hover:bg-terracotta hover:border-terracotta text-sm font-medium"
+                }
               >
                 Get {t.name}
               </Link>
@@ -146,22 +157,22 @@ export default function PricingPage() {
         ))}
       </section>
 
-      <section className="max-w-3xl mx-auto px-6 pb-24">
-        <h2 className="text-xs font-semibold tracking-widest text-iron uppercase mb-6">
+      <section className="max-w-3xl mx-auto px-8 pb-24">
+        <h2 className="text-[11px] font-medium tracking-[0.08em] text-ink-3 uppercase mb-7">
           Common questions
         </h2>
         <dl className="space-y-6">
           {FAQ.map((item) => (
-            <div key={item.q} className="border-b border-iron/10 pb-6">
-              <dt className="text-base font-semibold mb-2">{item.q}</dt>
-              <dd className="text-sm text-iron leading-relaxed">{item.a}</dd>
+            <div key={item.q} className="border-b border-rule pb-6">
+              <dt className="text-base font-medium mb-2">{item.q}</dt>
+              <dd className="text-sm text-ink-2 leading-relaxed">{item.a}</dd>
             </div>
           ))}
         </dl>
       </section>
 
-      <footer className="max-w-6xl mx-auto px-6 py-10 text-xs text-iron flex items-center justify-between border-t border-iron/10">
-        <Link href={{ pathname: "/" }} className="hover:text-ink">
+      <footer className="max-w-6xl mx-auto px-8 py-10 text-xs text-ink-3 flex items-center justify-between border-t border-rule">
+        <Link href="/" className="hover:text-ink">
           ← Back to Helm
         </Link>
         <a href="mailto:hello@helm.app" className="hover:text-ink">
