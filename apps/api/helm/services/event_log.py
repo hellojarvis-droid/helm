@@ -38,8 +38,15 @@ async def write(
     payload: dict[str, Any],
     business_id: uuid.UUID | None = None,
     cost_cents: int = 0,
+    commit: bool = True,
 ) -> LoggedEvent:
-    """Insert a single agent event. Commits before returning.
+    """Insert a single agent event.
+
+    Default behavior commits immediately. Pass `commit=False` when the caller
+    is mutating other state in the same transaction and needs the event to
+    land or roll back atomically — the caller then owns the commit. Per
+    CLAUDE.md hard rule #4 ("Every agent action is logged. Event-sourced.")
+    state changes and their audit events must not split-commit.
 
     `event_type` values in use:
       - 'message.user'     — a user message into the chat
@@ -63,8 +70,13 @@ async def write(
         cost_cents=cost_cents,
     )
     session.add(row)
-    await session.commit()
-    await session.refresh(row)
+    if commit:
+        await session.commit()
+        await session.refresh(row)
+    else:
+        # Flush populates the autoincrement PK without committing, so the
+        # caller can read row.id and still roll back on a later failure.
+        await session.flush()
     return LoggedEvent(
         id=row.id,
         session_id=row.session_id,
