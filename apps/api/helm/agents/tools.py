@@ -429,9 +429,9 @@ async def _request_user_approval(ctx: ToolContext, args: dict[str, Any]) -> dict
         expires_at=datetime.now(UTC) + timedelta(hours=expires_raw),
     )
     ctx.db.add(row)
-    await ctx.db.commit()
-    await ctx.db.refresh(row)
-
+    # Approval row + audit event must land or roll back together. Network
+    # I/O (SSE emit, push) happens after commit and is best-effort.
+    await ctx.db.flush()
     await event_log.write(
         ctx.db,
         session_id=ctx.session_id,
@@ -443,7 +443,9 @@ async def _request_user_approval(ctx: ToolContext, args: dict[str, Any]) -> dict
             "kind": row.kind,
             "summary": row.summary,
         },
+        commit=False,
     )
+    await ctx.db.commit()
 
     ctx.events_out.append(
         ChatEvent(
@@ -509,9 +511,9 @@ async def _create_business(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
         status="initializing",
     )
     ctx.db.add(biz)
-    await ctx.db.commit()
-    await ctx.db.refresh(biz)
-
+    # Flush populates biz.id without committing, so the audit event lands
+    # in the same transaction as the row it describes (CLAUDE.md rule #4).
+    await ctx.db.flush()
     await event_log.write(
         ctx.db,
         session_id=ctx.session_id,
@@ -524,7 +526,9 @@ async def _create_business(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
             "vertical": biz.vertical,
             "weekly_spend_cap_cents": biz.weekly_spend_cap_cents,
         },
+        commit=False,
     )
+    await ctx.db.commit()
     return {
         "status": "ok",
         "business_id": str(biz.id),
