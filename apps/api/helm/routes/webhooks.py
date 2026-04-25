@@ -21,13 +21,13 @@ from typing import Any
 
 import stripe
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.config import get_settings
 from helm.db.models import Business, Integration, User
-from helm.db.session import get_session
+from helm.db.session import session_scope
 from helm.services import event_log, stripe_authorization, stripe_billing, stripe_client
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -76,10 +76,7 @@ def _status_from_event(event_type: str, payload: dict[str, Any]) -> str | None:
 
 
 @router.post("/composio", status_code=status.HTTP_200_OK)
-async def composio_webhook(
-    request: Request,
-    db: AsyncSession = Depends(get_session),
-) -> dict[str, str]:
+async def composio_webhook(request: Request) -> dict[str, str]:
     body = await request.body()
     signature = request.headers.get(_SIG_HEADER)
     if not _verify_composio_signature(body, signature):
@@ -105,24 +102,26 @@ async def composio_webhook(
     if new_status is None:
         return {"status": "ignored", "reason": "no status mapping for event"}
 
-    # Flip the matching integrations row. Idempotent: re-delivery hits the same row.
-    res = await db.execute(
-        select(Integration).where(Integration.composio_connection_id == connection_id)
-    )
-    row = res.scalar_one_or_none()
-    if row is None:
-        # Not our connection — could be another tenant on the same Composio
-        # workspace. 200 OK so Composio doesn't retry.
-        return {"status": "ignored", "reason": "unknown connection_id"}
+    # Open the DB only after the request is authenticated. A bad signature
+    # must reject without depending on DB health.
+    async with session_scope() as db:
+        res = await db.execute(
+            select(Integration).where(Integration.composio_connection_id == connection_id)
+        )
+        row = res.scalar_one_or_none()
+        if row is None:
+            # Not our connection — could be another tenant on the same Composio
+            # workspace. 200 OK so Composio doesn't retry.
+            return {"status": "ignored", "reason": "unknown connection_id"}
 
-    row.status = new_status
-    row.meta = {
-        **row.meta,
-        "last_webhook_event": event_type,
-        "last_webhook_status": new_status,
-    }
-    await db.commit()
-    return {"status": "ok", "integration_status": new_status}
+        row.status = new_status
+        row.meta = {
+            **row.meta,
+            "last_webhook_event": event_type,
+            "last_webhook_status": new_status,
+        }
+        await db.commit()
+        return {"status": "ok", "integration_status": new_status}
 
 
 def _extract_connection_id(payload: dict[str, Any]) -> str | None:
@@ -147,10 +146,7 @@ def _extract_connection_id(payload: dict[str, Any]) -> str | None:
 
 
 @router.post("/stripe")
-async def stripe_webhook(
-    request: Request,
-    db: AsyncSession = Depends(get_session),
-) -> dict[str, Any]:
+async def stripe_webhook(request: Request) -> dict[str, Any]:
     body = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
     try:
@@ -175,21 +171,24 @@ async def stripe_webhook(
     )
     log.info("stripe.event", type=event_type)
 
-    if event_type == "account.updated":
-        return await _handle_account_updated(db, data_obj)
-    if event_type == "issuing_authorization.request":
-        return await _handle_authorization_request(db, data_obj)
-    if event_type == "payment_intent.succeeded":
-        return await _handle_payment_succeeded(db, data_obj)
-    if event_type in {
-        "customer.subscription.created",
-        "customer.subscription.updated",
-        "customer.subscription.deleted",
-    }:
-        return await _handle_subscription_event(db, event_type, data_obj)
+    # Open the DB only after the signature is verified. A bad signature must
+    # reject without depending on DB health.
+    async with session_scope() as db:
+        if event_type == "account.updated":
+            return await _handle_account_updated(db, data_obj)
+        if event_type == "issuing_authorization.request":
+            return await _handle_authorization_request(db, data_obj)
+        if event_type == "payment_intent.succeeded":
+            return await _handle_payment_succeeded(db, data_obj)
+        if event_type in {
+            "customer.subscription.created",
+            "customer.subscription.updated",
+            "customer.subscription.deleted",
+        }:
+            return await _handle_subscription_event(db, event_type, data_obj)
 
-    # Unknown event type — ack so Stripe doesn't retry forever.
-    return {"status": "ignored", "type": event_type}
+        # Unknown event type — ack so Stripe doesn't retry forever.
+        return {"status": "ignored", "type": event_type}
 
 
 async def _handle_account_updated(db: AsyncSession, account: dict[str, Any]) -> dict[str, Any]:

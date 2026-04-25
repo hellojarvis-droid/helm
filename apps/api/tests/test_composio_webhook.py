@@ -33,9 +33,8 @@ def _patch_webhook_secret(monkeypatch):
     get_settings.cache_clear()
 
 
-@requires_db
 @pytest.mark.asyncio
-async def test_webhook_rejects_missing_signature(session) -> None:
+async def test_webhook_rejects_missing_signature() -> None:
     app = create_app()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -43,9 +42,8 @@ async def test_webhook_rejects_missing_signature(session) -> None:
     assert r.status_code == 401
 
 
-@requires_db
 @pytest.mark.asyncio
-async def test_webhook_rejects_bad_signature(session) -> None:
+async def test_webhook_rejects_bad_signature() -> None:
     app = create_app()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
