@@ -26,6 +26,7 @@ import { Rate, Trend } from "k6/metrics";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:8000";
 const JWT = __ENV.JWT || "";
+const AUTH_HEADERS = JWT ? { Authorization: `Bearer ${JWT}` } : {};
 
 const errorRate = new Rate("errors");
 const todayLatency = new Trend("today_latency_ms", true);
@@ -46,24 +47,23 @@ export const options = {
   },
 };
 
-const authHeaders = () =>
-  JWT ? { Authorization: `Bearer ${JWT}` } : {};
-
 export default function () {
   // 80% — cheap liveness probes (matches load-balancer cadence + browser polls)
   const h = http.get(`${BASE_URL}/health`, { tags: { endpoint: "health" } });
   check(h, { "health 200": (r) => r.status === 200 }) || errorRate.add(1);
 
-  // 10% — readiness probe with DB roundtrip
-  if (Math.random() < 0.1) {
+  // Deterministic 10/10/80 split via __ITER so p99 deltas across runs
+  // reflect server changes, not RNG sampling variance.
+  const slot = __ITER % 10;
+
+  if (slot === 0) {
     const r = http.get(`${BASE_URL}/ready`, { tags: { endpoint: "ready" } });
     check(r, { "ready 200": (x) => x.status === 200 }) || errorRate.add(1);
   }
 
-  // 10% — authenticated /today aggregate (skip when JWT not provided)
-  if (JWT && Math.random() < 0.1) {
+  if (slot === 1 && JWT) {
     const t = http.get(`${BASE_URL}/users/me/today`, {
-      headers: authHeaders(),
+      headers: AUTH_HEADERS,
       tags: { endpoint: "today" },
     });
     todayLatency.add(t.timings.duration);
