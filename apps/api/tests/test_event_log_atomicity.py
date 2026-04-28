@@ -38,13 +38,18 @@ async def _seed_user_and_session(session) -> tuple[User, AgentSession]:
 @pytest.mark.asyncio
 async def test_create_business_rolls_back_when_event_log_fails(session, monkeypatch) -> None:
     user, ag = await _seed_user_and_session(session)
+    # session.rollback() expires loaded ORM attributes, so we capture the id
+    # before the boom — accessing `user.id` afterward would trigger a lazy
+    # reload from a non-greenlet context. (Mirrors the pattern in the
+    # sibling test below.)
+    user_id = user.id
 
     async def boom(*args, **kwargs):
         raise RuntimeError("simulated event_log failure")
 
     monkeypatch.setattr(tools_module.event_log, "write", boom)
 
-    ctx = ToolContext(db=session, session_id=ag.id, user_id=user.id, business_id=None)
+    ctx = ToolContext(db=session, session_id=ag.id, user_id=user_id, business_id=None)
 
     with pytest.raises(RuntimeError, match="simulated event_log failure"):
         await _create_business(
@@ -53,7 +58,7 @@ async def test_create_business_rolls_back_when_event_log_fails(session, monkeypa
         )
 
     await session.rollback()
-    rows = (await session.execute(select(Business).where(Business.user_id == user.id))).all()
+    rows = (await session.execute(select(Business).where(Business.user_id == user_id))).all()
     assert rows == [], "Business row leaked despite event_log failure"
 
 
