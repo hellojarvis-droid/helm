@@ -22,6 +22,7 @@ from helm.routes import auth as auth_routes
 from helm.routes import billing as billing_routes
 from helm.routes import businesses as businesses_routes
 from helm.routes import chat as chat_routes
+from helm.routes import computer_use as computer_use_routes
 from helm.routes import health as health_routes
 from helm.routes import integrations as integrations_routes
 from helm.routes import kill_switch as kill_switch_routes
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(stripe_routes.router)
     app.include_router(today_routes.router)
     app.include_router(billing_routes.router)
+    app.include_router(computer_use_routes.router)
     return app
 
 

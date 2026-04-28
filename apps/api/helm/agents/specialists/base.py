@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.config import get_settings
 from helm.db.models import AgentEvent, Business, Integration
-from helm.services import composio_client, event_log, kill_switch, tracing
+from helm.services import composio_client, computer_use, event_log, kill_switch, tracing
 
 log = structlog.get_logger("helm.specialists")
 
@@ -44,6 +44,46 @@ _COSTS = {
 }
 
 _MAX_TOOL_ITERATIONS = 8
+
+
+# Client-side tool the specialist can invoke to queue a desktop computer-use
+# task. Opt-in per specialist via `can_escalate_to_computer_use=True`. The
+# handler in LLMSpecialist._execute_tool_uses inserts a row through the
+# escalations service.
+_ESCALATE_TOOL_NAME = "escalate_to_computer_use"
+_ESCALATE_TOOL_DEF: ToolUnionParam = cast(
+    ToolUnionParam,
+    {
+        "name": _ESCALATE_TOOL_NAME,
+        "description": (
+            "Queue a desktop computer-use task for sites without a usable API "
+            "(e.g., TikTok Ads small-budget self-serve, supplier portals "
+            "without Composio coverage). Use ONLY when no Composio toolkit "
+            "available to you can complete the work — otherwise prefer the "
+            "API path. The desktop app picks this up; you do not block on it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": (
+                        "Self-contained instruction for the sandbox, including "
+                        "success criteria so it knows when it's done."
+                    ),
+                },
+                "app_hint": {
+                    "type": "string",
+                    "description": (
+                        "Which app/site the sandbox should open first. "
+                        "E.g. 'tiktok ads manager', 'printful catalog'."
+                    ),
+                },
+            },
+            "required": ["task", "app_hint"],
+        },
+    },
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +182,7 @@ class LLMSpecialist:
         composio_toolkits: list[str] | None = None,
         max_tokens: int = 4096,
         client: anthropic.AsyncAnthropic | None = None,
+        can_escalate_to_computer_use: bool = False,
     ) -> None:
         self.name = name
         self.model = model
@@ -150,6 +191,7 @@ class LLMSpecialist:
         self.composio_toolkits = composio_toolkits or []
         self.max_tokens = max_tokens
         self._client = client
+        self.can_escalate_to_computer_use = can_escalate_to_computer_use
 
     async def run(
         self,
@@ -276,6 +318,13 @@ class LLMSpecialist:
         tools: list[ToolUnionParam] = list(self.tools)
         composio_slugs: set[str] = set()
 
+        # Computer-use escalation is a client-side tool. Specialists that
+        # opt in can call it when no Composio toolkit covers the work; the
+        # business_id comes from ctx, not the model, so we can't be tricked
+        # into queuing tasks against another tenant.
+        if self.can_escalate_to_computer_use and ctx.business_id is not None:
+            tools.append(_ESCALATE_TOOL_DEF)
+
         usable = [t for t in self.composio_toolkits if t in ctx.connected_integrations]
         if usable:
             try:
@@ -334,6 +383,8 @@ class LLMSpecialist:
                     log.exception("specialist.composio_execute_failed", tool=name)
                     result = {"error": str(e)[:400]}
                     is_error = True
+            elif name == _ESCALATE_TOOL_NAME and self.can_escalate_to_computer_use:
+                result, is_error = await self._handle_escalation(db, ctx, args)
             else:
                 # Not a Composio tool → Anthropic handled it server-side
                 # (web_search etc.). The server embeds the result in the next
@@ -364,6 +415,52 @@ class LLMSpecialist:
                 }
             )
         return results
+
+    async def _handle_escalation(
+        self,
+        db: AsyncSession,
+        ctx: BusinessContext,
+        args: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        """Insert a computer-use escalation on behalf of this specialist.
+
+        business_id comes from `ctx`, never the model — the specialist can
+        only escalate within its own business scope. Returns (result, is_error).
+        """
+        if ctx.business_id is None:
+            return ({"error": "no business_id in context"}, True)
+        task = args.get("task")
+        app_hint = args.get("app_hint")
+        if not isinstance(task, str) or not task.strip():
+            return ({"error": "task is required"}, True)
+        if not isinstance(app_hint, str) or not app_hint.strip():
+            return ({"error": "app_hint is required"}, True)
+
+        try:
+            row = await computer_use.create(
+                db,
+                user_id=ctx.user_id,
+                business_id=ctx.business_id,
+                session_id=ctx.session_id,
+                requester=self.name,
+                task=task.strip(),
+                app_hint=app_hint.strip(),
+            )
+        except Exception as e:
+            log.exception("specialist.escalate_failed", specialist=self.name)
+            return ({"error": str(e)[:400]}, True)
+
+        return (
+            {
+                "status": "queued",
+                "escalation_id": str(row.id),
+                "note": (
+                    "Computer-use task queued. Tell the user the desktop sandbox "
+                    "will pick it up; do not wait for it to complete."
+                ),
+            },
+            False,
+        )
 
 
 class StubSpecialist:

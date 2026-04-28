@@ -207,22 +207,31 @@ eas secret:create --scope project --name EXPO_PUBLIC_POSTHOG_KEY --value phc_…
 - [ ] **Insurance** — Cyber + E&O at minimum. Vouch and Coalition both
   underwrite this profile in 24h.
 
-## 12. Phase 6 Computer Use (when ready)
+## 12. Phase 6 Computer Use
 
-The CEO can already escalate to computer use (`escalate_to_computer_use`
-tool fires `computer_use_requested` events). The desktop sandbox executor
-is the missing piece:
+The Phase 6 queue + state machine is shipped. Specifically:
 
-Two paths:
-- **Anthropic-hosted (recommended)**: when Anthropic Managed Agents
-  ships a hosted computer-use sandbox via Messages API, wire the desktop
-  app to poll `computer_use_requested` events on a session and forward
-  them. ~1 day of work.
-- **Self-hosted**: Docker image with Xvfb + a browser, polled by Tauri.
-  ~1 week + ongoing infra.
+- `escalate_to_computer_use` (CEO tool) and `LLMSpecialist._handle_escalation`
+  (used by Ads Operator + Product Builder) both insert rows into
+  `computer_use_escalations` with status `queued`.
+- The desktop app (Tauri) ships a polling runner (`apps/desktop/src-tauri/src/runner.rs`)
+  that calls `GET /computer_use/queue`, atomically claims a row, heartbeats
+  while running, and POSTs a terminal state on completion.
+- The runner's `Executor` trait is pluggable. Today it ships with `MockExecutor`
+  (sleeps, reports success) so the queue/claim/heartbeat/complete pipeline
+  can be exercised end-to-end without screen control.
 
-Skip this until users actually request something Composio can't do — the
-8 specialists already cover ~95% of legitimate workflows.
+**Remaining work** to make computer-use actually run real tasks:
+- Implement `AnthropicComputerUseExecutor` against the Messages API
+  computer-use tool — drives the user's screen via native input/screen-capture
+  primitives. ~1–2 sessions of work + per-OS testing.
+- Optional: a Helm-hosted sandbox fallback for users without the desktop
+  app installed (Anthropic-provided VM when available; self-hosted Xvfb +
+  Chromium otherwise). Reserved for a later phase based on demand signal.
+
+The 8 specialists cover ~95% of legitimate workflows via Composio APIs;
+the remaining 5% (TikTok small-budget self-serve, supplier portals
+without Composio coverage) is what computer-use unlocks.
 
 ## 13. What's done — for handoff confidence
 

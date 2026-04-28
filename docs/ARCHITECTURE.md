@@ -242,6 +242,28 @@ CREATE TABLE integrations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX ON integrations(business_id, toolkit);
+
+-- Computer-use escalations (Phase 6 queue)
+CREATE TABLE computer_use_escalations (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id),
+  business_id UUID NOT NULL REFERENCES businesses(id),
+  session_id UUID NOT NULL REFERENCES agent_sessions(id),
+  status TEXT NOT NULL,    -- 'queued','claimed','running','succeeded','failed','cancelled'
+  requester TEXT NOT NULL, -- 'ceo_agent','ads_operator','product_builder',…
+  task TEXT NOT NULL,
+  app_hint TEXT NOT NULL,
+  result JSONB NOT NULL DEFAULT '{}',
+  error TEXT,
+  claimed_by TEXT,         -- desktop device fingerprint
+  claimed_at TIMESTAMPTZ,
+  last_heartbeat_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ON computer_use_escalations(user_id, status, created_at DESC);
+CREATE INDEX ON computer_use_escalations(business_id, created_at DESC);
 ```
 
 ## 6. Agent Runtime — How the Orchestrator Works
@@ -296,11 +318,14 @@ session = client.beta.sessions.create(
 For tasks without an API (e.g., TikTok doesn't have a full public ads API for small budgets, some supplier portals are web-only), the Ads Operator and Product Builder can escalate to a computer-use sub-agent:
 
 1. The specialist calls `escalate_to_computer_use(task, app_hint)`.
-2. A dedicated Managed Agents session spins up with the `computer_use` tool enabled.
-3. If the user's desktop app is online and paired, we can stream the screen back to the user for observation. If not, it runs on a Helm-hosted VM (Anthropic-provided sandbox).
-4. Session completes, returns structured result, closes the sandbox.
+2. The CEO tool path (`helm.agents.tools._escalate_to_computer_use`) and the specialist-side helper (`LLMSpecialist._handle_escalation`) both insert a row into `computer_use_escalations` with status `queued` and emit a `computer_use_requested` event.
+3. The desktop app polls `GET /computer_use/queue`, atomically claims a queued row via `POST /{id}/claim` (with a stable device fingerprint), runs it through a pluggable `Executor` trait (today: `MockExecutor`; future: `AnthropicComputerUseExecutor` driving the Messages API + native screen control), heartbeats progress notes during the run, and POSTs `succeeded`/`failed` on `/{id}/complete`.
+4. Stale claims (no heartbeat within `STALE_AFTER`) are lazily re-queued on read so a desktop crash doesn't strand a task.
+5. If the user's desktop app is online and paired, the executor drives the user's screen and they observe the run live. If not, the row stays queued until a desktop comes online (the Helm-hosted VM fallback is reserved for a follow-up phase).
 
-**Security note:** Computer-use sessions have network-restricted sandboxes. They cannot access the Stripe card numbers directly — they pull scoped tokens from the vault for each action.
+State machine: `queued → claimed → running → succeeded | failed`; any non-terminal state can transition to `cancelled` via `POST /{id}/cancel`.
+
+**Security note:** Computer-use sessions have network-restricted sandboxes. They cannot access the Stripe card numbers directly — they pull scoped tokens from the vault for each action. The runner only ever receives `task` + `app_hint` from the API; `business_id` ownership is enforced server-side at insert time, so the model can't escalate against another tenant.
 
 ## 8. Realtime Communication
 

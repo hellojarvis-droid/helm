@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.agents.specialists.base import invoke as invoke_specialist
 from helm.db.models import Approval, Business, User
-from helm.services import event_log, push
+from helm.services import computer_use, event_log, push
 
 _VERTICALS = {"dtc_physical", "dtc_pod", "saas", "services"}
 _APPROVAL_KINDS = ("spend", "publish", "delete", "other")
@@ -591,17 +591,18 @@ async def _escalate_to_computer_use(ctx: ToolContext, args: dict[str, Any]) -> d
     if isinstance(app_hint, dict):
         return app_hint
 
-    logged = await event_log.write(
+    row = await computer_use.create(
         ctx.db,
-        session_id=ctx.session_id,
+        user_id=ctx.user_id,
         business_id=biz,
-        event_type="computer_use_requested",
-        agent_name="ceo_agent",
-        payload={"task": task, "app_hint": app_hint},
+        session_id=ctx.session_id,
+        requester="ceo_agent",
+        task=task,
+        app_hint=app_hint,
     )
     return {
         "status": "queued",
-        "escalation_id": logged.id,
+        "escalation_id": str(row.id),
         "note": (
             "Computer-use task queued. The desktop app picks this up when the "
             "user opens it. Tell the user to watch the screen when prompted."

@@ -272,20 +272,26 @@ Work in parallel where possible. Priority order based on user-visible impact:
 **Goal:** Desktop app can drive the user's screen for tasks without APIs.
 
 ### 6.1 Computer-use agent session
-- [ ] Managed Agents with `computer_use` tool enabled
+- [ ] Managed Agents with `computer_use` tool enabled (executor swap-in)
 - [ ] Sandboxed environment with network allowlist (only to the sites needed for the task)
 - [ ] Tauri app streams the screen back to the user for observation
 - [ ] Permission prompts for sensitive sites
 
 ### 6.2 Escalation flow
-- [ ] Specialist agents can call `escalate_to_computer_use(task, app_hint)`
-- [ ] Task queued → desktop app picks it up → runs → returns result
+- [x] Specialist agents can call `escalate_to_computer_use(task, app_hint)`
+- [x] Task queued → desktop app picks it up → runs → returns result
 - [ ] If desktop app offline, task runs on Helm-hosted sandbox and desktop shows replay
 
 ### 6.3 Integration with existing specialists
-- [ ] Ads Operator uses computer-use for TikTok small-budget flows
-- [ ] Product Builder uses computer-use for supplier portals without APIs
-- [ ] Fallback is always API-first, computer-use last
+- [x] Ads Operator can escalate (TikTok small-budget flows)
+- [x] Product Builder can escalate (supplier portals without APIs)
+- [x] Fallback is always API-first, computer-use last (Composio toolkits checked first)
+
+**Status:** the queue + state machine + claim/heartbeat/complete contract is
+shipped end-to-end. The desktop runner ships with `MockExecutor` (sleeps,
+reports success); replacing it with an `AnthropicComputerUseExecutor`
+(Messages API + native screen control) is the single remaining piece for
+this phase.
 
 **Exit criteria:** Ads Operator can launch a TikTok campaign end-to-end using computer use when the API falls short. User can watch it happen on desktop.
 

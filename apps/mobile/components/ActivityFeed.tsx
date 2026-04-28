@@ -77,6 +77,30 @@ const BADGE: Record<string, Badge> = {
     border: "rgba(107,107,107,0.2)",
   },
   computer_use_requested: { label: "computer use", bg: colors.ink, fg: colors.paper },
+  computer_use_progress: {
+    label: "computer use",
+    bg: colors.haze,
+    fg: colors.ink,
+    border: "rgba(107,107,107,0.2)",
+  },
+  computer_use_succeeded: {
+    label: "computer use",
+    bg: "rgba(45,134,89,0.12)",
+    fg: colors.success,
+    border: "rgba(45,134,89,0.4)",
+  },
+  computer_use_failed: {
+    label: "computer use",
+    bg: "rgba(168,37,26,0.1)",
+    fg: colors.danger,
+    border: "rgba(168,37,26,0.35)",
+  },
+  computer_use_cancelled: {
+    label: "computer use",
+    bg: colors.haze,
+    fg: colors.iron,
+    border: "rgba(107,107,107,0.2)",
+  },
   kill_switch_activated: { label: "kill switch", bg: colors.danger, fg: colors.paper },
   error: {
     label: "error",
@@ -228,6 +252,14 @@ function summarize(ev: AgentEvent): string {
       return `${stringOr(p.name, "specialist")} → ${stringOr(p.status, "ok")}`;
     case "computer_use_requested":
       return `Computer use queued: ${stringOr(p.task, "—")} (${stringOr(p.app_hint, "no app hint")})`;
+    case "computer_use_progress":
+      return `Computer use: ${stringOr(p.note, "in progress…")}`;
+    case "computer_use_succeeded":
+      return `Computer use done: ${stringOr(p.task, "—")}`;
+    case "computer_use_failed":
+      return `Computer use failed: ${stringOr(p.error, stringOr(p.task, "—"))}`;
+    case "computer_use_cancelled":
+      return `Computer use cancelled${p.reason ? `: ${stringOr(p.reason, "")}` : ""}`;
     case "kill_switch_activated":
       return "Kill switch activated — all agents halted.";
     case "error":
