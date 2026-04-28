@@ -211,9 +211,7 @@ async def test_other_user_cannot_see_or_mutate(session) -> None:
         assert r.status_code == 200
         assert r.json() == []
 
-        r = await client.get(
-            f"/computer_use/{esc.id}", headers={"Authorization": "Bearer s"}
-        )
+        r = await client.get(f"/computer_use/{esc.id}", headers={"Authorization": "Bearer s"})
         assert r.status_code == 404
 
         r = await client.post(

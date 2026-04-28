@@ -64,9 +64,7 @@ async def test_create_business_rolls_back_when_event_log_fails(session, monkeypa
 
 @requires_db
 @pytest.mark.asyncio
-async def test_request_user_approval_rolls_back_when_event_log_fails(
-    session, monkeypatch
-) -> None:
+async def test_request_user_approval_rolls_back_when_event_log_fails(session, monkeypatch) -> None:
     user, ag = await _seed_user_and_session(session)
 
     biz = Business(user_id=user.id, name="Atom Co", vertical="dtc_physical")
@@ -93,7 +91,9 @@ async def test_request_user_approval_rolls_back_when_event_log_fails(
         )
 
     await session.rollback()
-    approvals = (await session.execute(select(Approval).where(Approval.business_id == biz_id))).all()
+    approvals = (
+        await session.execute(select(Approval).where(Approval.business_id == biz_id))
+    ).all()
     assert approvals == [], "Approval row leaked despite event_log failure"
 
 

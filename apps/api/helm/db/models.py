@@ -284,9 +284,7 @@ class ComputerUseEscalation(Base):
         ForeignKey("agent_sessions.id", ondelete="CASCADE"),
         nullable=False,
     )
-    status: Mapped[str] = mapped_column(
-        String, nullable=False, server_default=text("'queued'")
-    )
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'queued'"))
     requester: Mapped[str] = mapped_column(String, nullable=False)
     task: Mapped[str] = mapped_column(Text, nullable=False)
     app_hint: Mapped[str] = mapped_column(String, nullable=False)
@@ -299,9 +297,7 @@ class ComputerUseEscalation(Base):
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

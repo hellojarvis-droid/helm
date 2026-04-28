@@ -45,9 +45,7 @@ async def test_escalate_inserts_row_and_event(session) -> None:
     assert result["status"] == "queued"
     assert "escalation_id" in result
 
-    row = (
-        (await session.execute(select(ComputerUseEscalation))).scalars().one()
-    )
+    row = (await session.execute(select(ComputerUseEscalation))).scalars().one()
     assert row.requester == "ceo_agent"
     assert row.status == "queued"
     assert row.app_hint == "tiktok ads manager"

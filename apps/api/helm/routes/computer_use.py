@@ -147,9 +147,7 @@ async def claim_escalation(
 ) -> EscalationResponse:
     user_row = await sync_user_from_supabase(db, user)
     try:
-        row = await computer_use.claim(
-            db, user_row.id, escalation_id, claimed_by=body.claimed_by
-        )
+        row = await computer_use.claim(db, user_row.id, escalation_id, claimed_by=body.claimed_by)
     except EscalationError as e:
         raise _to_http(e) from e
     return EscalationResponse.from_row(row)

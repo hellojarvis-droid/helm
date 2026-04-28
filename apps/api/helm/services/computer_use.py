@@ -155,9 +155,7 @@ async def claim(
         existing = await get_for_user(db, user_id, escalation_id)
         if existing is None:
             raise EscalationError("escalation not found", http_status=404)
-        raise EscalationError(
-            f"cannot claim: status is {existing.status}", http_status=409
-        )
+        raise EscalationError(f"cannot claim: status is {existing.status}", http_status=409)
     await db.commit()
     row = await get_for_user(db, user_id, escalation_id)
     assert row is not None
@@ -177,13 +175,9 @@ async def heartbeat(
     if row is None:
         raise EscalationError("escalation not found", http_status=404)
     if row.status in TERMINAL_STATES:
-        raise EscalationError(
-            f"cannot heartbeat: status is {row.status}", http_status=409
-        )
+        raise EscalationError(f"cannot heartbeat: status is {row.status}", http_status=409)
     if row.claimed_by != claimed_by:
-        raise EscalationError(
-            "this device does not own the claim", http_status=409
-        )
+        raise EscalationError("this device does not own the claim", http_status=409)
 
     now = datetime.now(UTC)
     if row.status == "claimed":
@@ -220,21 +214,15 @@ async def complete(
 ) -> ComputerUseEscalation:
     """Terminal transition. status must be 'succeeded' or 'failed'."""
     if status not in ("succeeded", "failed"):
-        raise EscalationError(
-            "complete status must be succeeded or failed", http_status=422
-        )
+        raise EscalationError("complete status must be succeeded or failed", http_status=422)
 
     row = await get_for_user(db, user_id, escalation_id)
     if row is None:
         raise EscalationError("escalation not found", http_status=404)
     if row.status in TERMINAL_STATES:
-        raise EscalationError(
-            f"already terminal: {row.status}", http_status=409
-        )
+        raise EscalationError(f"already terminal: {row.status}", http_status=409)
     if row.claimed_by != claimed_by:
-        raise EscalationError(
-            "this device does not own the claim", http_status=409
-        )
+        raise EscalationError("this device does not own the claim", http_status=409)
 
     now = datetime.now(UTC)
     row.status = status
@@ -280,9 +268,7 @@ async def cancel(
     if row is None:
         raise EscalationError("escalation not found", http_status=404)
     if row.status in TERMINAL_STATES:
-        raise EscalationError(
-            f"already terminal: {row.status}", http_status=409
-        )
+        raise EscalationError(f"already terminal: {row.status}", http_status=409)
 
     now = datetime.now(UTC)
     row.status = "cancelled"
