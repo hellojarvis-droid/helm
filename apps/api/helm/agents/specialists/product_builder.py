@@ -38,6 +38,9 @@ def build() -> LLMSpecialist:
         composio_toolkits=["shopify", "printful", "namecheap", "cj_dropshipping"],
         # Store build is a longer conversation than ideation — up the budget.
         max_tokens=8000,
+        # Some supplier portals are web-only; escalate when Composio doesn't
+        # cover the supplier the user picked.
+        can_escalate_to_computer_use=True,
     )
 
 

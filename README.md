@@ -2,7 +2,7 @@
 
 Agent-native operating system for serial entrepreneurs. One CEO Agent, eight specialists, three surfaces (mobile + desktop + web), real Stripe-issued virtual cards with programmatic spend controls.
 
-**Status:** Phase 2 money spine + Phase 3 commerce spine + Phase 5 agent swarm shipped. 8/8 specialists real. Three surfaces: mobile (Expo) + web (Next.js 15) live; desktop (Tauri) is the remaining surface. See [`docs/BUILD_PLAN.md`](./docs/BUILD_PLAN.md) for the dependency graph.
+**Status:** Phases 0–5 + 7 shipped. 8/8 specialists real, three surfaces alive (web, mobile, desktop). Phase 6 (computer use) — queue + state machine + desktop runner shipped end-to-end with a `MockExecutor`; swapping in an Anthropic-driven executor is the remaining piece. See [`docs/BUILD_PLAN.md`](./docs/BUILD_PLAN.md) for the dependency graph.
 
 ## The docs
 
@@ -42,6 +42,7 @@ helm/
 - **Three observability stacks** — Sentry (errors, all surfaces), Langfuse (LLM traces + cost per session), PostHog (product analytics on web + mobile).
 - **Billing** — tier limits (Founder / Operator / Portfolio) enforced at write-time. Stripe Checkout upgrade flow + Customer Portal for self-serve management. Subscription webhooks keep `user.tier` in sync.
 - **Push** — Expo push notifications fire when approvals land; tapping deep-links into the Approvals tab.
+- **Computer-use queue** — CEO tool + Ads Operator + Product Builder can `escalate_to_computer_use(task, app_hint)`, inserting a queued row that the Tauri desktop runner claims, heartbeats, and completes. State machine: `queued → claimed → running → succeeded | failed`; stale claims are re-queued. Executor is pluggable (`MockExecutor` ships; Anthropic-driven executor is the next swap-in).
 
 ## Local dev
 

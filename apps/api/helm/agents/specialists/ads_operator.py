@@ -32,6 +32,9 @@ def build() -> LLMSpecialist:
         tools=[_WEB_SEARCH_TOOL],
         composio_toolkits=["meta_ads", "google_ads", "tiktok_ads"],
         max_tokens=6000,
+        # TikTok small-budget self-serve has no public API; escalate to the
+        # desktop sandbox when Composio's tiktok_ads coverage falls short.
+        can_escalate_to_computer_use=True,
     )
 
 

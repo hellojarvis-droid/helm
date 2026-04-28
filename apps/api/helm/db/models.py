@@ -250,6 +250,83 @@ class AgentMemory(Base):
     )
 
 
+class ComputerUseEscalation(Base):
+    """A task the desktop computer-use sandbox needs to run.
+
+    Lifecycle:
+      queued → claimed (desktop POSTs /claim with a device id)
+        → running (heartbeat with status=running, optional progress)
+        → succeeded | failed (terminal POST /complete)
+      Any non-terminal → cancelled (user POST /cancel)
+
+    Stale `claimed`/`running` rows whose `last_heartbeat_at` is older than the
+    configured timeout are lazily reset to `queued` on read (so a desktop
+    crash doesn't strand a task) — see helm.services.computer_use.
+    """
+
+    __tablename__ = "computer_use_escalations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("businesses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'queued'"))
+    requester: Mapped[str] = mapped_column(String, nullable=False)
+    task: Mapped[str] = mapped_column(Text, nullable=False)
+    app_hint: Mapped[str] = mapped_column(String, nullable=False)
+    result: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    claimed_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+        onupdate=text("now()"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status in ('queued','claimed','running','succeeded','failed','cancelled')",
+            name="computer_use_escalations_status_check",
+        ),
+        Index(
+            "ix_cu_escalations_user_status_created",
+            "user_id",
+            "status",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_cu_escalations_business_created",
+            "business_id",
+            text("created_at DESC"),
+        ),
+    )
+
+
 class Integration(Base):
     __tablename__ = "integrations"
 

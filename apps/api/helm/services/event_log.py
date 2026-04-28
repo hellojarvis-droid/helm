@@ -58,7 +58,9 @@ async def write(
       - 'spend_intent' / 'spend_authorized' / 'spend_declined'
       - 'kill_switch_activated'
       - 'specialist_completed'
-      - 'computer_use_requested'
+      - 'computer_use_requested' / 'computer_use_progress'
+        / 'computer_use_succeeded' / 'computer_use_failed'
+        / 'computer_use_cancelled'
       - 'error'
     """
     row = AgentEvent(

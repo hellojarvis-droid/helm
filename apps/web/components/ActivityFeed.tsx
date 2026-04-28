@@ -49,6 +49,22 @@ const EVENT_BADGE: Record<string, { label: string; className: string }> = {
     label: "computer use",
     className: "bg-ink text-paper",
   },
+  computer_use_progress: {
+    label: "computer use",
+    className: "bg-haze text-ink border border-iron/20",
+  },
+  computer_use_succeeded: {
+    label: "computer use",
+    className: "bg-success/10 text-success border border-success/40",
+  },
+  computer_use_failed: {
+    label: "computer use",
+    className: "bg-danger/10 text-danger border border-danger/40",
+  },
+  computer_use_cancelled: {
+    label: "computer use",
+    className: "bg-haze text-iron border border-iron/20",
+  },
   kill_switch_activated: {
     label: "kill switch",
     className: "bg-danger text-paper",
@@ -192,6 +208,14 @@ function summarize(ev: AgentEvent): string {
       return `${stringOr(p.name, "specialist")} → ${stringOr(p.status, "ok")}`;
     case "computer_use_requested":
       return `Computer use queued: ${stringOr(p.task, "—")} (${stringOr(p.app_hint, "no app hint")})`;
+    case "computer_use_progress":
+      return `Computer use: ${stringOr(p.note, "in progress…")}`;
+    case "computer_use_succeeded":
+      return `Computer use done: ${stringOr(p.task, "—")}`;
+    case "computer_use_failed":
+      return `Computer use failed: ${stringOr(p.error, stringOr(p.task, "—"))}`;
+    case "computer_use_cancelled":
+      return `Computer use cancelled${p.reason ? `: ${stringOr(p.reason, "")}` : ""}`;
     case "kill_switch_activated":
       return "Kill switch activated — all agents halted.";
     case "error":
