@@ -37,6 +37,11 @@ router = APIRouter(prefix="/businesses", tags=["businesses"])
 VERTICALS = {"dtc_physical", "dtc_pod", "saas", "services"}
 
 
+class CreateBusinessOnboarding(BaseModel):
+    idea: Annotated[str | None, Field(default=None, max_length=4000)] = None
+    enabled_specialists: list[str] = Field(default_factory=list, max_length=20)
+
+
 class CreateBusinessRequest(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=120)]
     vertical: Annotated[str, Field(description="One of " + ", ".join(sorted(VERTICALS)))]
@@ -49,6 +54,7 @@ class CreateBusinessRequest(BaseModel):
             description="Hard weekly cap the Stripe Issuing card enforces.",
         ),
     ] = 50000
+    onboarding: CreateBusinessOnboarding | None = None
 
 
 class BusinessResponse(BaseModel):
@@ -140,11 +146,31 @@ async def create_business(
         vertical=body.vertical,
         weekly_spend_cap_cents=body.weekly_spend_cap_cents,
         status="initializing",
+        brand_kit=_initial_brand_kit(body.onboarding),
     )
     db.add(biz)
     await db.commit()
     await db.refresh(biz)
     return BusinessResponse.from_row(biz)
+
+
+def _initial_brand_kit(onboarding: CreateBusinessOnboarding | None) -> dict[str, Any]:
+    if onboarding is None:
+        return {}
+
+    enabled = [
+        name.strip()
+        for name in onboarding.enabled_specialists
+        if isinstance(name, str) and name.strip()
+    ][:20]
+    idea = onboarding.idea.strip() if isinstance(onboarding.idea, str) else ""
+    return {
+        "_onboarding": {
+            "idea": idea,
+            "enabled_specialists": enabled,
+            "captured_at": datetime.now(UTC).isoformat(),
+        }
+    }
 
 
 @router.get("", response_model=list[BusinessResponse])

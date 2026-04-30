@@ -29,7 +29,14 @@ async def test_create_list_get_business(session) -> None:
         # Create
         r = await client.post(
             "/businesses",
-            json={"name": "Candle Co", "vertical": "dtc_physical"},
+            json={
+                "name": "Candle Co",
+                "vertical": "dtc_physical",
+                "onboarding": {
+                    "idea": "A soy candle studio for renters.",
+                    "enabled_specialists": ["Atlas", "Creative Director", "Ads Operator"],
+                },
+            },
             headers=headers,
         )
         assert r.status_code == 201, r.text
@@ -38,6 +45,12 @@ async def test_create_list_get_business(session) -> None:
         assert biz["vertical"] == "dtc_physical"
         assert biz["status"] == "initializing"
         assert biz["weekly_spend_cap_cents"] == 50000
+        assert biz["brand_kit"]["_onboarding"]["idea"] == "A soy candle studio for renters."
+        assert biz["brand_kit"]["_onboarding"]["enabled_specialists"] == [
+            "Atlas",
+            "Creative Director",
+            "Ads Operator",
+        ]
         biz_id = biz["id"]
 
         # List

@@ -83,6 +83,12 @@ export default function OnboardingPage() {
         name: name.trim(),
         vertical,
         weekly_spend_cap_cents: cap * 100,
+        onboarding: {
+          idea: idea.trim(),
+          enabled_specialists: Object.entries(enabled)
+            .filter(([, isEnabled]) => isEnabled)
+            .map(([specialist]) => specialist),
+        },
       });
       // Fire-and-forget: if the user pasted a brand URL, pre-populate
       // the Brand Library in the background. Any failure is silent —
@@ -131,11 +137,7 @@ export default function OnboardingPage() {
                 key={s.key}
                 className={cn(
                   "h-1 w-7 rounded-sm",
-                  i < activeIndex
-                    ? "bg-terracotta"
-                    : i === activeIndex
-                      ? "bg-ink"
-                      : "bg-sand-2",
+                  i < activeIndex ? "bg-terracotta" : i === activeIndex ? "bg-ink" : "bg-sand-2",
                 )}
               />
             ))}
@@ -157,15 +159,8 @@ export default function OnboardingPage() {
               setBrandUrl={setBrandUrl}
             />
           )}
-          {step === "analyze" && (
-            <StepAnalyze idea={idea} name={name} vertical={vertical} />
-          )}
-          {step === "swarm" && (
-            <StepSwarm
-              enabled={enabled}
-              setEnabled={setEnabled}
-            />
-          )}
+          {step === "analyze" && <StepAnalyze idea={idea} name={name} vertical={vertical} />}
+          {step === "swarm" && <StepSwarm enabled={enabled} setEnabled={setEnabled} />}
           {step === "plan" && <StepPlan name={name} vertical={vertical} cap={cap} />}
         </div>
 
@@ -304,7 +299,8 @@ function StepIdea({
 
         <div className="space-y-1.5">
           <label className="text-[11px] uppercase tracking-[0.06em] text-ink-3 font-medium">
-            Existing brand URL <span className="text-ink-3/70 normal-case tracking-normal">(optional)</span>
+            Existing brand URL{" "}
+            <span className="text-ink-3/70 normal-case tracking-normal">(optional)</span>
           </label>
           <Input
             type="url"
@@ -313,7 +309,8 @@ function StepIdea({
             placeholder="https://yourbrand.com — we'll auto-fill your Brand Library"
           />
           <p className="text-xs text-ink-3">
-            Claude extracts your palette, typography, and voice from the page. Costs about 5¢ in credits.
+            Claude extracts your palette, typography, and voice from the page. Costs about 5¢ in
+            credits.
           </p>
         </div>
 
@@ -342,26 +339,16 @@ function StepIdea({
   );
 }
 
-function StepAnalyze({
-  idea,
-  name,
-  vertical,
-}: {
-  idea: string;
-  name: string;
-  vertical: string;
-}) {
-  const chip = useMemo(
-    () => STARTER_CHIPS.find((c) => c.vertical === vertical),
-    [vertical],
-  );
+function StepAnalyze({ idea, name, vertical }: { idea: string; name: string; vertical: string }) {
+  const chip = useMemo(() => STARTER_CHIPS.find((c) => c.vertical === vertical), [vertical]);
   return (
     <div>
       <h2 className="font-serif text-[28px] leading-tight tracking-tightest mb-2">
         Atlas is thinking through it.
       </h2>
       <p className="text-sm text-ink-3 mb-6">
-        Market, margins, risks, and the simplest shape of the first 90 days for <b>{name || "your venture"}</b>.
+        Market, margins, risks, and the simplest shape of the first 90 days for{" "}
+        <b>{name || "your venture"}</b>.
       </p>
 
       <div className="space-y-4">
@@ -401,22 +388,12 @@ function StepAnalyze({
         />
       </div>
 
-      <p className="mt-6 text-xs text-ink-3">
-        Pitch: &ldquo;{idea.trim()}&rdquo;
-      </p>
+      <p className="mt-6 text-xs text-ink-3">Pitch: &ldquo;{idea.trim()}&rdquo;</p>
     </div>
   );
 }
 
-function AnalysisItem({
-  num,
-  title,
-  desc,
-}: {
-  num: string;
-  title: string;
-  desc: string;
-}) {
+function AnalysisItem({ num, title, desc }: { num: string; title: string; desc: string }) {
   return (
     <div className="flex gap-4 py-3 border-b border-rule last:border-b-0">
       <div className="font-serif text-[20px] text-terracotta w-8 leading-none">{num}</div>
@@ -463,8 +440,7 @@ function StepSwarm({
             <button
               type="button"
               onClick={() =>
-                !s.required &&
-                setEnabled((prev) => ({ ...prev, [s.name]: !prev[s.name] }))
+                !s.required && setEnabled((prev) => ({ ...prev, [s.name]: !prev[s.name] }))
               }
               disabled={s.required}
               className={cn(
@@ -492,15 +468,7 @@ function StepSwarm({
   );
 }
 
-function StepPlan({
-  name,
-  vertical,
-  cap,
-}: {
-  name: string;
-  vertical: string;
-  cap: number;
-}) {
+function StepPlan({ name, vertical, cap }: { name: string; vertical: string; cap: number }) {
   const weeks = useMemo(() => planFor(vertical, cap), [vertical, cap]);
   return (
     <div>
@@ -508,7 +476,8 @@ function StepPlan({
         Your first 30 days.
       </h2>
       <p className="text-sm text-ink-3 mb-6">
-        A simple plan for <b>{name || "your venture"}</b>. Atlas runs it; you approve the big moments.
+        A simple plan for <b>{name || "your venture"}</b>. Atlas runs it; you approve the big
+        moments.
       </p>
 
       <div className="space-y-5">

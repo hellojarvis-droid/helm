@@ -132,7 +132,7 @@ CEO_TOOLS: list[dict[str, Any]] = [
         "description": (
             "Create a new business row for this user. CLAUDE.md requires approval "
             "before opening a new business — you MUST call request_user_approval FIRST "
-            "and confirm an approval_granted event in the log before invoking this tool.\n\n"
+            "and confirm an approval_approved event in the log before invoking this tool.\n\n"
             "Returns {business_id, name, vertical, status}. Once created, you typically "
             "follow up by delegating to creative_director with a brand-kit task and, "
             "when online, product_builder to stand up the storefront."
@@ -382,6 +382,17 @@ async def _delegate_to_specialist(ctx: ToolContext, args: dict[str, Any]) -> dic
             }
     # Note: this tool keeps its own UUID parsing because it returns a
     # specialist-shaped error envelope (with `metadata` + `cost_cents`).
+    if biz_id is not None:
+        row = await ctx.db.execute(
+            select(Business.id).where(Business.id == biz_id, Business.user_id == ctx.user_id)
+        )
+        if row.scalar_one_or_none() is None:
+            return {
+                "status": "error",
+                "summary": "business not found for this user",
+                "metadata": {},
+                "cost_cents": 0,
+            }
 
     result = await invoke_specialist(
         ctx.db,
@@ -442,6 +453,9 @@ async def _request_user_approval(ctx: ToolContext, args: dict[str, Any]) -> dict
             "approval_id": str(row.id),
             "kind": row.kind,
             "summary": row.summary,
+            "details": row.details,
+            "business_id": str(biz_id),
+            "expires_at": row.expires_at.isoformat(),
         },
         commit=False,
     )

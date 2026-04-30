@@ -17,16 +17,20 @@ import asyncio
 import io
 import uuid
 from collections.abc import AsyncIterator
+from datetime import datetime
+from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from helm.agents.runtime import default_runtime
 from helm.auth import CurrentUser, require_user
 from helm.config import get_settings
+from helm.db.models import AgentEvent
 from helm.db.session import get_session, session_scope
 from helm.db.tenant import get_business_for_user
 from helm.errors import ClientError
@@ -42,6 +46,76 @@ class ChatRequest(BaseModel):
     business_id: uuid.UUID | None = Field(
         default=None,
         description="Business scope for this turn. Null = orchestrator / cross-business.",
+    )
+
+
+class ChatHistoryItem(BaseModel):
+    id: int
+    kind: str
+    role: str | None = None
+    text: str | None = None
+    business_id: uuid.UUID | None = None
+    created_at: datetime
+    payload: dict[str, Any]
+    approval: dict[str, Any] | None = None
+
+
+class ChatHistoryResponse(BaseModel):
+    session_id: uuid.UUID
+    items: list[ChatHistoryItem]
+
+
+_HISTORY_EVENT_TYPES = (
+    "message.user",
+    "message.agent",
+    "tool_call",
+    "tool_result",
+    "specialist_completed",
+    "approval_requested",
+    "approval_approved",
+    "approval_modified",
+    "approval_denied",
+    "approval_expired",
+    "launch_started",
+    "launch_step_completed",
+    "launch_step_skipped",
+    "launch_step_failed",
+    "launch_completed",
+    "launch_failed",
+)
+
+
+@router.get("/history", response_model=ChatHistoryResponse)
+async def get_chat_history(
+    business_id: uuid.UUID | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    user: CurrentUser = Depends(require_user),
+    db: AsyncSession = Depends(get_session),
+) -> ChatHistoryResponse:
+    """Return the user's persistent Atlas thread for web/mobile hydration."""
+    user_row = await sync_user_from_supabase(db, user)
+    if business_id is not None:
+        biz = await get_business_for_user(db, user_row.id, business_id)
+        if biz is None:
+            raise HTTPException(status_code=404, detail="business not found")
+
+    session = await sessions.get_or_create_ceo_session(db, user_row.id)
+    stmt = (
+        select(AgentEvent)
+        .where(
+            AgentEvent.session_id == session.id,
+            AgentEvent.event_type.in_(_HISTORY_EVENT_TYPES),
+        )
+        .order_by(AgentEvent.id.desc())
+        .limit(limit)
+    )
+    if business_id is not None:
+        stmt = stmt.where(AgentEvent.business_id == business_id)
+
+    rows = list(reversed((await db.execute(stmt)).scalars().all()))
+    return ChatHistoryResponse(
+        session_id=session.id,
+        items=[_history_item(row) for row in rows],
     )
 
 
@@ -88,6 +162,66 @@ async def post_chat(
             "X-Accel-Buffering": "no",  # disable buffering in proxies (nginx/render)
         },
     )
+
+
+def _history_item(row: AgentEvent) -> ChatHistoryItem:
+    payload = dict(row.payload or {})
+    role: str | None = None
+    text: str | None = None
+    approval: dict[str, Any] | None = None
+
+    if row.event_type == "message.user":
+        role = "user"
+        text = _payload_text(payload)
+    elif row.event_type == "message.agent":
+        role = "agent"
+        text = _payload_text(payload)
+    elif row.event_type.startswith("approval_"):
+        approval = {
+            "approval_id": payload.get("approval_id"),
+            "kind": payload.get("kind"),
+            "summary": payload.get("summary"),
+            "status": row.event_type.removeprefix("approval_"),
+            "modifications": payload.get("modifications"),
+        }
+        text = payload.get("summary") if isinstance(payload.get("summary"), str) else None
+    elif row.event_type == "tool_call":
+        name = payload.get("name")
+        text = f"Called {name}" if isinstance(name, str) else None
+    elif row.event_type == "tool_result":
+        name = payload.get("name")
+        is_error = payload.get("is_error")
+        if isinstance(name, str):
+            text = f"{name} {'failed' if is_error else 'completed'}"
+    elif row.event_type == "specialist_completed":
+        summary = payload.get("summary")
+        text = summary if isinstance(summary, str) else None
+
+    return ChatHistoryItem(
+        id=row.id,
+        kind=row.event_type,
+        role=role,
+        text=text,
+        business_id=row.business_id,
+        created_at=row.created_at,
+        payload=payload,
+        approval=approval,
+    )
+
+
+def _payload_text(payload: dict[str, Any]) -> str:
+    raw = payload.get("text")
+    if isinstance(raw, str) and raw.strip():
+        return raw
+    blocks = payload.get("content_blocks")
+    if isinstance(blocks, list):
+        parts = [
+            block.get("text", "")
+            for block in blocks
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        return "".join(part for part in parts if isinstance(part, str))
+    return ""
 
 
 class TranscribeResponse(BaseModel):

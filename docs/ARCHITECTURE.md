@@ -197,7 +197,7 @@ CREATE TABLE agent_events (
   id BIGSERIAL PRIMARY KEY,
   session_id UUID NOT NULL REFERENCES agent_sessions(id),
   business_id UUID REFERENCES businesses(id),
-  event_type TEXT NOT NULL,  -- 'tool_call','decision','approval_requested','approval_granted','spend','error'
+  event_type TEXT NOT NULL,  -- 'tool_call','decision','approval_requested','approval_approved','spend','error'
   agent_name TEXT NOT NULL,
   payload JSONB NOT NULL,
   cost_cents INT NOT NULL DEFAULT 0,  -- token cost

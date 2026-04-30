@@ -55,6 +55,35 @@ export type ChatEvent =
   | { kind: "done" }
   | { kind: "error"; reason: string; detail?: string };
 
+export interface ChatHistoryItem {
+  id: number;
+  kind: string;
+  role: "user" | "agent" | null;
+  text: string | null;
+  business_id: string | null;
+  created_at: string;
+  payload: Record<string, unknown>;
+  approval: {
+    approval_id?: string;
+    kind?: string;
+    summary?: string;
+    status?: string;
+    modifications?: Record<string, unknown> | null;
+  } | null;
+}
+
+export interface ChatHistoryResponse {
+  session_id: string;
+  items: ChatHistoryItem[];
+}
+
+export async function getChatHistory(businessId?: string): Promise<ChatHistoryResponse> {
+  const qs = businessId ? `?business_id=${encodeURIComponent(businessId)}` : "";
+  const res = await apiFetch(`/chat/history${qs}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "getChatHistory");
+  return res.json();
+}
+
 export async function* streamChat(
   message: string,
   businessId?: string,
@@ -124,6 +153,10 @@ export async function createBusiness(body: {
   name: string;
   vertical: string;
   weekly_spend_cap_cents?: number;
+  onboarding?: {
+    idea?: string;
+    enabled_specialists?: string[];
+  };
 }): Promise<Business> {
   const res = await apiFetch("/businesses", {
     method: "POST",
@@ -219,20 +252,24 @@ export async function listEvents(
   if (opts.limit) params.set("limit", String(opts.limit));
   if (opts.beforeId) params.set("before_id", String(opts.beforeId));
   const queryString = params.toString();
-  const res = await apiFetch(`/businesses/${businessId}/events${queryString ? `?${queryString}` : ""}`);
+  const res = await apiFetch(
+    `/businesses/${businessId}/events${queryString ? `?${queryString}` : ""}`,
+  );
   if (!res.ok) throw await apiErrorFromResponse(res, "listEvents");
   return res.json();
 }
 
 // Cross-business tenant-scoped events feed. Used by /agents, /events, and
 // the Approvals "Why?" trace.
-export async function listAllEvents(opts: {
-  businessId?: string;
-  eventType?: string;
-  agentName?: string;
-  limit?: number;
-  beforeId?: number;
-} = {}): Promise<AgentEvent[]> {
+export async function listAllEvents(
+  opts: {
+    businessId?: string;
+    eventType?: string;
+    agentName?: string;
+    limit?: number;
+    beforeId?: number;
+  } = {},
+): Promise<AgentEvent[]> {
   const params = new URLSearchParams();
   if (opts.businessId) params.set("business_id", opts.businessId);
   if (opts.eventType) params.set("event_type", opts.eventType);
@@ -304,14 +341,7 @@ export async function respondToApproval(
 export interface ConnectorInfo {
   slug: string;
   name: string;
-  category:
-    | "Creative"
-    | "Commerce"
-    | "Payments"
-    | "Ads"
-    | "Social"
-    | "Ops"
-    | "Communication";
+  category: "Creative" | "Commerce" | "Payments" | "Ads" | "Social" | "Ops" | "Communication";
   scope: "account" | "business";
   auth_mode: "composio_oauth" | "api_key";
   description: string;
@@ -346,10 +376,7 @@ export async function listAccountConnections(): Promise<ConnectionStatus[]> {
   return res.json();
 }
 
-export async function saveAccountApiKey(
-  slug: string,
-  apiKey: string,
-): Promise<ConnectionStatus> {
+export async function saveAccountApiKey(slug: string, apiKey: string): Promise<ConnectionStatus> {
   const res = await apiFetch(`/connections/account/api_key/${slug}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -384,13 +411,7 @@ export async function syncAccountConnection(slug: string): Promise<ConnectionSta
 // Creative Studio renders
 // ──────────────────────────────────────────────────────────
 
-export type RenderStatus =
-  | "pending"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type RenderStatus = "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface RenderJob {
   id: string;
@@ -678,11 +699,13 @@ export interface CreditTransaction {
   meta: Record<string, unknown>;
 }
 
-export async function listCreditTransactions(opts: {
-  kind?: CreditTransaction["kind"];
-  limit?: number;
-  beforeId?: string;
-} = {}): Promise<CreditTransaction[]> {
+export async function listCreditTransactions(
+  opts: {
+    kind?: CreditTransaction["kind"];
+    limit?: number;
+    beforeId?: string;
+  } = {},
+): Promise<CreditTransaction[]> {
   const params = new URLSearchParams();
   if (opts.kind) params.set("kind", opts.kind);
   if (opts.limit) params.set("limit", String(opts.limit));
@@ -717,7 +740,12 @@ export async function quoteTopUp(body: {
 export async function startTopUp(body: {
   credit_amount_cents: number;
   payment_method: PaymentMethod;
-}): Promise<{ url: string; credit_amount_cents: number; fee_cents: number; total_charge_cents: number }> {
+}): Promise<{
+  url: string;
+  credit_amount_cents: number;
+  fee_cents: number;
+  total_charge_cents: number;
+}> {
   const res = await apiFetch(`/credits/top_up`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -744,9 +772,7 @@ export interface BusinessIntegration {
   created_at: string;
 }
 
-export async function listBusinessIntegrations(
-  businessId: string,
-): Promise<BusinessIntegration[]> {
+export async function listBusinessIntegrations(businessId: string): Promise<BusinessIntegration[]> {
   const res = await apiFetch(`/integrations/${businessId}`);
   if (!res.ok) throw new Error(`listBusinessIntegrations: ${res.status}`);
   return res.json();
@@ -787,9 +813,7 @@ export async function disconnectBusinessIntegration(
   }
 }
 
-export async function syncBusinessIntegration(
-  integrationId: string,
-): Promise<BusinessIntegration> {
+export async function syncBusinessIntegration(integrationId: string): Promise<BusinessIntegration> {
   const res = await apiFetch(`/integrations/${integrationId}/sync`, { method: "POST" });
   if (!res.ok) throw new Error(`syncBusinessIntegration: ${res.status}`);
   return res.json();
@@ -960,9 +984,7 @@ export interface SyncStatus {
   external_updated_at: string | null;
 }
 
-export async function getBusinessSyncStatus(
-  businessId: string,
-): Promise<SyncStatus[]> {
+export async function getBusinessSyncStatus(businessId: string): Promise<SyncStatus[]> {
   const res = await apiFetch(`/businesses/${businessId}/sync_status`);
   if (!res.ok) throw new Error(`getBusinessSyncStatus: ${res.status}`);
   return res.json();
@@ -1021,13 +1043,16 @@ export async function* streamLaunch(
   signal?: AbortSignal,
 ): AsyncIterable<LaunchStreamEvent> {
   const env = clientEnv();
-  const res = await fetch(`${env.NEXT_PUBLIC_HELM_API_BASE}/businesses/${businessId}/launch/stream`, {
-    signal,
-    headers: {
-      Accept: "text/event-stream",
-      ...(await authHeader()),
+  const res = await fetch(
+    `${env.NEXT_PUBLIC_HELM_API_BASE}/businesses/${businessId}/launch/stream`,
+    {
+      signal,
+      headers: {
+        Accept: "text/event-stream",
+        ...(await authHeader()),
+      },
     },
-  });
+  );
   if (!res.ok || !res.body) {
     throw new Error(`streamLaunch: ${res.status} ${await res.text()}`);
   }
@@ -1112,9 +1137,7 @@ export interface BrandScrapeResult {
   } & Record<string, unknown>;
 }
 
-export async function getBrandLibrary(
-  businessId: string,
-): Promise<BrandLibrary | null> {
+export async function getBrandLibrary(businessId: string): Promise<BrandLibrary | null> {
   const res = await apiFetch(`/businesses/${businessId}/brand_library`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`getBrandLibrary: ${res.status}`);
@@ -1486,9 +1509,7 @@ export async function listExpenses(
   if (opts.year) params.set("year", String(opts.year));
   if (opts.category) params.set("category", opts.category);
   const qs = params.toString();
-  const res = await apiFetch(
-    `/businesses/${businessId}/expenses${qs ? `?${qs}` : ""}`,
-  );
+  const res = await apiFetch(`/businesses/${businessId}/expenses${qs ? `?${qs}` : ""}`);
   if (!res.ok) throw new Error(`listExpenses: ${res.status}`);
   return (await res.json()) as Expense[];
 }
@@ -1524,10 +1545,7 @@ export function expensesExportUrl(businessId: string, year?: number): string {
   return year ? `${base}?year=${year}` : base;
 }
 
-export async function downloadExpensesCsv(
-  businessId: string,
-  year?: number,
-): Promise<Blob> {
+export async function downloadExpensesCsv(businessId: string, year?: number): Promise<Blob> {
   const path = expensesExportUrl(businessId, year);
   const res = await apiFetch(path);
   if (!res.ok) throw new Error(`downloadExpensesCsv: ${res.status}`);
@@ -2033,7 +2051,9 @@ export async function getBuilderProject(id: string): Promise<BuilderProject> {
 
 export async function patchBuilderProject(
   id: string,
-  body: Partial<Pick<BuilderProject, "name" | "description" | "custom_domain" | "daily_spend_cap_cents">>,
+  body: Partial<
+    Pick<BuilderProject, "name" | "description" | "custom_domain" | "daily_spend_cap_cents">
+  >,
 ): Promise<BuilderProject> {
   const res = await apiFetch(`/builder/projects/${id}`, {
     method: "PATCH",
@@ -2106,9 +2126,7 @@ export async function listBuilderVersions(projectId: string): Promise<BuilderVer
   return (await res.json()) as BuilderVersion[];
 }
 
-export async function verifyBuilderProject(
-  projectId: string,
-): Promise<BuilderVerifyReport> {
+export async function verifyBuilderProject(projectId: string): Promise<BuilderVerifyReport> {
   const res = await apiFetch(`/builder/projects/${projectId}/verify`);
   if (!res.ok) throw new Error(`verifyBuilderProject: ${res.status}`);
   return (await res.json()) as BuilderVerifyReport;
@@ -2121,9 +2139,7 @@ export interface BuilderPublishResponse {
   status: string;
 }
 
-export async function publishBuilderProject(
-  projectId: string,
-): Promise<BuilderPublishResponse> {
+export async function publishBuilderProject(projectId: string): Promise<BuilderPublishResponse> {
   const res = await apiFetch(`/builder/projects/${projectId}/publish`, {
     method: "POST",
   });

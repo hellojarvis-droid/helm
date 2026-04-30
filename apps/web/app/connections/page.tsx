@@ -40,10 +40,7 @@ export default function ConnectionsPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [cat, conns] = await Promise.all([
-        getConnectorCatalog(),
-        listAccountConnections(),
-      ]);
+      const [cat, conns] = await Promise.all([getConnectorCatalog(), listAccountConnections()]);
       setCatalog(cat);
       setConnections(conns);
     } catch (e) {
@@ -78,9 +75,7 @@ export default function ConnectionsPage() {
       );
     }
     items = [...items].sort((a, b) =>
-      sortKey === "alpha"
-        ? a.name.localeCompare(b.name)
-        : a.popularity - b.popularity,
+      sortKey === "alpha" ? a.name.localeCompare(b.name) : a.popularity - b.popularity,
     );
     return items;
   }, [accountConnectors, category, search, sortKey]);
@@ -88,7 +83,7 @@ export default function ConnectionsPage() {
   const connectedCount = connections.filter((c) => c.status === "active").length;
 
   const openConnector = catalog?.find((c) => c.slug === openSlug) ?? null;
-  const openConnection = openSlug ? connByToolkit.get(openSlug) ?? null : null;
+  const openConnection = openSlug ? (connByToolkit.get(openSlug) ?? null) : null;
 
   async function handleDisconnect(slug: string) {
     try {
@@ -110,16 +105,16 @@ export default function ConnectionsPage() {
 
   return (
     <AppShell breadcrumbs={["Helm", "Connections"]}>
-      <div className="px-10 pt-8 pb-20 max-w-5xl">
-        <header className="mb-7 flex items-end justify-between">
+      <div className="px-4 pt-6 pb-20 max-w-5xl sm:px-8 lg:px-10 lg:pt-8">
+        <header className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="font-serif text-[44px] leading-none tracking-tightest mb-2">
+            <h1 className="font-serif text-[34px] leading-none tracking-tightest mb-2 sm:text-[44px]">
               Connections
             </h1>
             <p className="text-sm text-ink-3 max-w-prose">
-              Hook up the tools Helm orchestrates for you — your Runway and Higgsfield accounts
-              for Creative Studio, your Gmail and Slack for communication. These apply across
-              every business you run.
+              Hook up the tools Helm orchestrates for you — your Runway and Higgsfield accounts for
+              Creative Studio, your Gmail and Slack for communication. These apply across every
+              business you run.
             </p>
           </div>
           <div className="text-right">
@@ -242,11 +237,7 @@ function ConnectorCard({
   const failed = connection?.status === "failed" || connection?.status === "expired";
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="text-left rounded-md border border-rule bg-paper p-5 hover:bg-paper-2 transition-colors group"
-    >
+    <article className="rounded-md border border-rule bg-paper p-5 transition-colors hover:bg-paper-2">
       <div className="flex items-start gap-3">
         <ConnectorLogo connector={connector} />
         <div className="flex-1 min-w-0">
@@ -261,13 +252,14 @@ function ConnectorCard({
               {connected && <span className="chip chip-sage">connected</span>}
               {pending && <span className="chip chip-amber">pending</span>}
               {failed && <span className="chip chip-rose">{connection?.status}</span>}
-              <span
-                className={cn(
-                  "h-7 w-7 grid place-items-center rounded-sm border border-rule text-ink-3 group-hover:bg-sand group-hover:text-ink transition-colors",
-                )}
+              <button
+                type="button"
+                onClick={onOpen}
+                className="h-7 w-7 grid place-items-center rounded-sm border border-rule text-ink-3 transition-colors hover:bg-sand hover:text-ink"
+                aria-label={`${connected ? "Manage" : "Connect"} ${connector.name}`}
               >
                 {connected ? <Icon name="settings" size={14} /> : <Icon name="plus" size={14} />}
-              </span>
+              </button>
             </span>
           </div>
           <p className="text-[12.5px] text-ink-3 mt-1.5 leading-relaxed">{connector.description}</p>
@@ -278,45 +270,42 @@ function ConnectorCard({
               <span className="font-mono">· {connection.masked_key}</span>
             )}
           </div>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={onOpen}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-rule bg-paper px-3 py-1.5 text-[12px] text-ink-2 hover:bg-sand hover:text-ink"
+            >
+              {connected ? (
+                <>
+                  <Icon name="settings" size={13} /> Manage
+                </>
+              ) : (
+                <>
+                  <Icon name="plus" size={13} /> Connect
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
       {(connected || pending || failed) && (
-        <div
-          className="flex gap-3 mt-4 pt-3 border-t border-rule text-[12px]"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="flex gap-3 mt-4 pt-3 border-t border-rule text-[12px]">
           {pending && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSync();
-              }}
-              className="text-terracotta-2 hover:underline"
-            >
+            <button type="button" onClick={onSync} className="text-terracotta-2 hover:underline">
               Check status
             </button>
           )}
           {failed && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpen();
-              }}
-              className="text-terracotta-2 hover:underline"
-            >
+            <button type="button" onClick={onOpen} className="text-terracotta-2 hover:underline">
               Reconnect
             </button>
           )}
           {(connected || failed) && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDisconnect();
-              }}
+              onClick={onDisconnect}
               className="text-ink-3 hover:text-rose-2 ml-auto"
             >
               Disconnect
@@ -324,7 +313,6 @@ function ConnectorCard({
           )}
         </div>
       )}
-    </button>
+    </article>
   );
 }
-

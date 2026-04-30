@@ -21,8 +21,9 @@ Design invariants:
 
   4. **Graceful degradation.** Steps that need an external toolkit the
      user hasn't connected (Shopify, Meta Ads, Printful) mark themselves
-     `skipped` with a human-readable reason. The launch completes
-     regardless — the launch theater shows which stages actually ran.
+     `skipped` with a human-readable reason. The hand-off approval is
+     gated by a readiness checklist so Helm does not ask for paid spend
+     when the storefront or ad channel setup is missing.
 
   5. **Event-sourced.** Every transition writes an `agent_events` row
      so SSE can stream the launch theater without polling DB state.
@@ -208,9 +209,7 @@ async def resume_pending_launches() -> int:
         rows = (
             (
                 await db.execute(
-                    select(BusinessLaunch).where(
-                        BusinessLaunch.status.in_(("pending", "running"))
-                    )
+                    select(BusinessLaunch).where(BusinessLaunch.status.in_(("pending", "running")))
                 )
             )
             .scalars()
@@ -244,9 +243,7 @@ async def snapshot(db: AsyncSession, launch_id: uuid.UUID) -> LaunchSnapshot | N
     )
 
 
-async def snapshot_for_business(
-    db: AsyncSession, business_id: uuid.UUID
-) -> LaunchSnapshot | None:
+async def snapshot_for_business(db: AsyncSession, business_id: uuid.UUID) -> LaunchSnapshot | None:
     """Return the latest launch for a business (active or most recent)."""
     q = (
         select(BusinessLaunch)
@@ -420,7 +417,7 @@ async def _run_one_step(launch_id: uuid.UUID, step_name: str) -> None:
             # Runner returns either {"skipped": reason} or the output dict.
             if isinstance(result, dict) and result.get("__skipped__"):
                 step.status = "skipped"
-                step.output = {"reason": result.get("reason", "")}
+                step.output = {k: v for k, v in result.items() if k != "__skipped__"}
             else:
                 step.status = "completed"
                 step.output = result
@@ -536,10 +533,13 @@ async def _run_issuing_card(
     user_row = await db.get(User, business.user_id)
     email = user_row.email if user_row else f"business+{business.id}@helm.app"
 
-    cardholder_id = business.stripe_issuing_cardholder_id or await stripe_client.create_issuing_cardholder(
-        account_id=business.stripe_account_id,
-        business_name=business.name,
-        business_email=email,
+    cardholder_id = (
+        business.stripe_issuing_cardholder_id
+        or await stripe_client.create_issuing_cardholder(
+            account_id=business.stripe_account_id,
+            business_name=business.name,
+            business_email=email,
+        )
     )
     card_id = await stripe_client.create_issuing_card(
         account_id=business.stripe_account_id,
@@ -687,8 +687,18 @@ async def _run_first_approval(
     """Create the hand-off approval card: the first ad spend budget request.
 
     This is the moment PRD §4.1 describes: "Approve $300 for first-week Meta ads?"
-    Always created (not gated by integrations) so the user always gets a hand-off.
+    It is only created once the launch is actually ready to spend; otherwise
+    the step returns a checklist the UI can use as the Launch Readiness Wizard.
     """
+    readiness = await _launch_readiness(db, launch)
+    if not readiness["ready"]:
+        return {
+            "__skipped__": True,
+            "reason": "launch_not_ready",
+            "readiness": readiness,
+            "business_status": business.status,
+        }
+
     proposed_cents = min(30000, business.weekly_spend_cap_cents)
     approval = Approval(
         business_id=business.id,
@@ -707,6 +717,7 @@ async def _run_first_approval(
             ),
             "launch_id": str(launch.id),
             "proposed_channels": ["meta_ads", "google_ads"],
+            "readiness": readiness,
         },
         expires_at=datetime.now(UTC) + timedelta(hours=72),
     )
@@ -725,6 +736,10 @@ async def _run_first_approval(
             "kind": "spend",
             "amount_cents": proposed_cents,
             "summary": approval.summary,
+            "details": approval.details,
+            "business_id": str(business.id),
+            "expires_at": approval.expires_at.isoformat(),
+            "readiness": readiness,
         },
     )
 
@@ -736,6 +751,7 @@ async def _run_first_approval(
         "approval_id": str(approval.id),
         "amount_cents": proposed_cents,
         "business_status": business.status,
+        "readiness": readiness,
     }
 
 
@@ -828,6 +844,94 @@ def _extract_json_object(text: str) -> dict[str, Any]:
                 except Exception:
                     return {}
     return {}
+
+
+async def _launch_readiness(db: AsyncSession, launch: BusinessLaunch) -> dict[str, Any]:
+    rows = (
+        (await db.execute(select(LaunchStep).where(LaunchStep.launch_id == launch.id)))
+        .scalars()
+        .all()
+    )
+    by_name = {step.step_name: step for step in rows}
+
+    storefront = by_name.get("storefront")
+    ad_accounts = by_name.get("ad_accounts")
+    checks = [
+        _readiness_check(
+            key="storefront",
+            label="Storefront is live",
+            step=storefront,
+            blocked_reason="Connect Shopify or finish the storefront before approving paid traffic.",
+        ),
+        _readiness_check(
+            key="ad_accounts",
+            label="At least one ad account is ready",
+            step=ad_accounts,
+            blocked_reason="Connect Meta, Google, or TikTok Ads before approving first-week spend.",
+            require_channels=True,
+        ),
+    ]
+    return {
+        "ready": all(check["status"] == "ready" for check in checks),
+        "checks": checks,
+    }
+
+
+def _readiness_check(
+    *,
+    key: str,
+    label: str,
+    step: LaunchStep | None,
+    blocked_reason: str,
+    require_channels: bool = False,
+) -> dict[str, Any]:
+    if step is None:
+        return {
+            "key": key,
+            "label": label,
+            "status": "blocked",
+            "reason": "step_missing",
+            "message": blocked_reason,
+        }
+
+    output = dict(step.output or {})
+    if step.status != "completed":
+        return {
+            "key": key,
+            "label": label,
+            "status": "blocked",
+            "reason": output.get("reason") or step.error or step.status,
+            "message": blocked_reason,
+        }
+
+    if require_channels:
+        channels = output.get("channels_checked")
+        if not isinstance(channels, list) or not channels:
+            return {
+                "key": key,
+                "label": label,
+                "status": "blocked",
+                "reason": "no_ad_channels_ready",
+                "message": blocked_reason,
+            }
+
+    return {
+        "key": key,
+        "label": label,
+        "status": "ready",
+        "summary": _compact_step_summary(output),
+    }
+
+
+def _compact_step_summary(output: dict[str, Any]) -> str:
+    for key in ("summary", "store_url"):
+        value = output.get(key)
+        if isinstance(value, str) and value.strip():
+            return value[:240]
+    channels = output.get("channels_checked")
+    if isinstance(channels, list) and channels:
+        return ", ".join(str(channel) for channel in channels[:4])
+    return "Ready"
 
 
 # Iterable helper used by the resume path — kept here so the module is

@@ -35,7 +35,8 @@ const STEP_META: Record<string, { title: string; specialist: string; description
   brand_kit: {
     title: "Designing the brand",
     specialist: "Creative Director",
-    description: "Name, palette, typography, voice — a coherent identity Atlas can hand to every channel.",
+    description:
+      "Name, palette, typography, voice — a coherent identity Atlas can hand to every channel.",
   },
   storefront: {
     title: "Standing up the storefront",
@@ -83,11 +84,17 @@ export default function LaunchPage({ params }: PageProps) {
     void boot();
   }, [boot]);
 
+  const snapshotStatus = snapshot?.status;
+
   // Subscribe to the SSE stream once we have an initial snapshot. Auto-reconnect
   // on transient drops by the browser — if streamLaunch throws, we log + exit.
   useEffect(() => {
-    if (!snapshot) return;
-    if (snapshot.status === "completed" || snapshot.status === "failed" || snapshot.status === "cancelled") {
+    if (!snapshot?.launch_id) return;
+    if (
+      snapshotStatus === "completed" ||
+      snapshotStatus === "failed" ||
+      snapshotStatus === "cancelled"
+    ) {
       setConnected(false);
       return;
     }
@@ -111,7 +118,7 @@ export default function LaunchPage({ params }: PageProps) {
     })();
 
     return () => ac.abort();
-  }, [id, snapshot?.launch_id]);
+  }, [id, snapshot?.launch_id, snapshotStatus]);
 
   const terminal =
     snapshot?.status === "completed" ||
@@ -120,7 +127,7 @@ export default function LaunchPage({ params }: PageProps) {
 
   return (
     <AppShell breadcrumbs={["Helm", "Businesses", biz?.name ?? "Launch", "Launch"]}>
-      <div className="px-10 pt-8 pb-20 max-w-4xl">
+      <div className="px-4 pt-6 pb-20 max-w-4xl sm:px-8 lg:px-10 lg:pt-8">
         <header className="mb-8">
           <div className="text-[12px] text-ink-3 tracking-[0.08em] uppercase mb-2">
             {snapshot?.status === "completed"
@@ -132,12 +139,10 @@ export default function LaunchPage({ params }: PageProps) {
                   : "Launching"}
             {connected && " · live"}
           </div>
-          <h1 className="font-serif text-[48px] leading-none tracking-tightest mb-3">
+          <h1 className="font-serif text-[36px] leading-none tracking-tightest mb-3 sm:text-[48px]">
             {headerText(snapshot, biz)}
           </h1>
-          <p className="text-sm text-ink-3 max-w-prose">
-            {bodyText(snapshot, biz)}
-          </p>
+          <p className="text-sm text-ink-3 max-w-prose">{bodyText(snapshot)}</p>
         </header>
 
         {error && (
@@ -256,6 +261,9 @@ function StepCard({
               Skipped — {humanizeReason(step.output.reason)}
             </p>
           )}
+          {isSkipped && step.step_name === "first_approval" && (
+            <ReadinessChecklist readiness={step.output?.readiness} />
+          )}
           {isFailed && step.error && (
             <p className="mt-2 text-xs text-rose-2 font-mono">{step.error}</p>
           )}
@@ -268,13 +276,52 @@ function StepCard({
   );
 }
 
-function StatusDot({
-  status,
-  running,
-}: {
-  status: LaunchStep["status"];
-  running: boolean;
-}) {
+function ReadinessChecklist({ readiness }: { readiness: unknown }) {
+  if (!readiness || typeof readiness !== "object") return null;
+  const checks = (readiness as { checks?: unknown }).checks;
+  if (!Array.isArray(checks)) return null;
+  return (
+    <div className="mt-3 rounded-sm border border-rule bg-paper/70 p-3">
+      <div className="text-[11px] uppercase tracking-[0.06em] text-ink-3 mb-2">
+        Launch readiness
+      </div>
+      <div className="space-y-2">
+        {checks.map((raw, i) => {
+          const check = raw as {
+            key?: string;
+            label?: string;
+            status?: string;
+            message?: string;
+            summary?: string;
+          };
+          const ready = check.status === "ready";
+          return (
+            <div key={check.key ?? i} className="flex items-start gap-2 text-xs">
+              <span
+                className={cn(
+                  "mt-0.5 h-4 w-4 shrink-0 rounded-full grid place-items-center border",
+                  ready
+                    ? "border-sage/50 bg-sage-soft text-sage-2"
+                    : "border-amber/50 bg-amber-soft text-amber-2",
+                )}
+              >
+                {ready ? <Icon name="check" size={10} /> : <Icon name="more" size={10} />}
+              </span>
+              <span>
+                <span className="text-ink">{check.label ?? "Readiness check"}</span>
+                <span className="block text-ink-3">
+                  {ready ? (check.summary ?? "Ready") : (check.message ?? "Needs setup")}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StatusDot({ status, running }: { status: LaunchStep["status"]; running: boolean }) {
   if (running) {
     return (
       <div className="shrink-0 h-7 w-7 grid place-items-center">
@@ -303,9 +350,11 @@ function StatusDot({
       </div>
     );
   }
-  return <div className="shrink-0 h-7 w-7 grid place-items-center">
-    <span className="h-2 w-2 rounded-full bg-sand-2" />
-  </div>;
+  return (
+    <div className="shrink-0 h-7 w-7 grid place-items-center">
+      <span className="h-2 w-2 rounded-full bg-sand-2" />
+    </div>
+  );
 }
 
 function statusLabel(status: LaunchStep["status"], prevCompleted: boolean): string {
@@ -350,8 +399,11 @@ function humanizeReason(raw: string): string {
     stripe_not_configured: "Stripe isn't configured on this deployment yet.",
     issuing_feature_flag_off: "Stripe Issuing hasn't been approved for this workspace.",
     no_stripe_account_yet: "Stripe Connect account not ready — skipping issuing.",
-    shopify_not_connected: "Shopify isn't connected — connect it in Integrations to launch a storefront.",
+    shopify_not_connected:
+      "Shopify isn't connected — connect it in Integrations to launch a storefront.",
     no_ad_platforms_connected: "No Meta/Google/TikTok account connected yet.",
+    launch_not_ready:
+      "Storefront and ad accounts need to be ready before Helm asks for paid spend.",
   };
   return MAP[raw] ?? raw;
 }
@@ -366,10 +418,12 @@ function headerText(snapshot: LaunchSnapshot | null, biz: BusinessDetail | null)
   return biz ? `Launching ${biz.name}…` : "Launching…";
 }
 
-function bodyText(snapshot: LaunchSnapshot | null, biz: BusinessDetail | null): string {
+function bodyText(snapshot: LaunchSnapshot | null): string {
   if (!snapshot) return "Atlas is assembling the specialists.";
   if (snapshot.status === "completed") {
-    return "Every step the swarm could run is done. Approve the first ad budget below to let Atlas hand off.";
+    return firstApprovalCreated(snapshot)
+      ? "Every ready step is done. Approve the first ad budget below to let Atlas hand off."
+      : "The launch is staged, but paid traffic is blocked until the readiness checklist is complete.";
   }
   if (snapshot.status === "failed") {
     return `${snapshot.error ?? "One or more steps failed"}. Retry below once you've resolved the cause — completed steps won't re-run.`;

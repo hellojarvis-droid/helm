@@ -45,6 +45,35 @@ export type ChatEvent =
   | { kind: "done" }
   | { kind: "error"; reason: string; detail?: string };
 
+export interface ChatHistoryItem {
+  id: number;
+  kind: string;
+  role: "user" | "agent" | null;
+  text: string | null;
+  business_id: string | null;
+  created_at: string;
+  payload: Record<string, unknown>;
+  approval: {
+    approval_id?: string;
+    kind?: string;
+    summary?: string;
+    status?: string;
+    modifications?: Record<string, unknown> | null;
+  } | null;
+}
+
+export interface ChatHistoryResponse {
+  session_id: string;
+  items: ChatHistoryItem[];
+}
+
+export async function getChatHistory(businessId?: string): Promise<ChatHistoryResponse> {
+  const qs = businessId ? `?business_id=${encodeURIComponent(businessId)}` : "";
+  const res = await apiFetch(`/chat/history${qs}`);
+  if (!res.ok) throw new Error(`getChatHistory ${res.status}`);
+  return res.json();
+}
+
 /**
  * Stream a chat turn, yielding ChatEvents as they arrive.
  *
@@ -166,6 +195,10 @@ export async function createBusiness(body: {
   name: string;
   vertical: string;
   weekly_spend_cap_cents?: number;
+  onboarding?: {
+    idea?: string;
+    enabled_specialists?: string[];
+  };
 }): Promise<Business> {
   const res = await apiFetch("/businesses", {
     method: "POST",

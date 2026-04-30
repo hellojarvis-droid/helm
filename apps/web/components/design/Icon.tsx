@@ -10,6 +10,7 @@ export type IconName =
   | "settings"
   | "users"
   | "bell"
+  | "menu"
   | "search"
   | "plus"
   | "send"
@@ -71,6 +72,7 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M8 17a2 2 0 0 0 4 0" />
     </>
   ),
+  menu: <path d="M4 6h12M4 10h12M4 14h12" />,
   search: (
     <>
       <circle cx="9" cy="9" r="5" />

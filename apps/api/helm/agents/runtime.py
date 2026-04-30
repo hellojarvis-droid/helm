@@ -333,7 +333,7 @@ class MessagesRuntime:
                 AgentEvent.session_id == session_id,
                 AgentEvent.event_type.in_(["message.user", "message.agent"]),
             )
-            .order_by(AgentEvent.created_at.asc())
+            .order_by(AgentEvent.created_at.asc(), AgentEvent.id.asc())
         )
         events = list(result.scalars().all())
         messages: list[dict[str, Any]] = []
@@ -341,11 +341,46 @@ class MessagesRuntime:
             if ev.event_type == "message.user":
                 messages.append({"role": "user", "content": ev.payload.get("text", "")})
             elif ev.event_type == "message.agent":
-                blocks = ev.payload.get("content_blocks") or [
-                    {"type": "text", "text": ev.payload.get("text", "")}
-                ]
-                messages.append({"role": "assistant", "content": blocks})
+                blocks = _assistant_replay_blocks(ev.payload)
+                if blocks:
+                    messages.append({"role": "assistant", "content": blocks})
         return messages
+
+
+def _assistant_replay_blocks(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return assistant blocks safe to send back to Anthropic as history.
+
+    We persist raw assistant `tool_use` blocks for audit, but a future request
+    cannot replay those blocks unless the matching `tool_result` immediately
+    follows in the same Messages API call. The durable event log stores tool
+    results as separate audit rows, so history replay strips tool calls and
+    keeps only human text plus a compact completion marker.
+    """
+    raw_blocks = payload.get("content_blocks")
+    blocks = raw_blocks if isinstance(raw_blocks, list) else []
+    text_blocks = [
+        {"type": "text", "text": block.get("text", "")}
+        for block in blocks
+        if isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+        and block.get("text", "").strip()
+    ]
+    if text_blocks:
+        return text_blocks
+
+    text = payload.get("text")
+    if isinstance(text, str) and text.strip():
+        return [{"type": "text", "text": text}]
+
+    if any(isinstance(block, dict) and block.get("type") == "tool_use" for block in blocks):
+        return [
+            {
+                "type": "text",
+                "text": "Previous tool work completed and is available in the activity history.",
+            }
+        ]
+    return []
 
 
 def _cost_cents(input_tokens: int, output_tokens: int) -> int:

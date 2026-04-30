@@ -49,10 +49,10 @@ export default function ApprovalsPage() {
 
   return (
     <AppShell breadcrumbs={["Helm", "Approvals"]}>
-      <div className="px-10 pt-8 pb-20 max-w-4xl">
-        <div className="flex items-end justify-between mb-6">
+      <div className="px-4 pt-6 pb-20 max-w-4xl sm:px-8 lg:px-10 lg:pt-8">
+        <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="font-serif text-[44px] leading-none tracking-tightest mb-2">
+            <h1 className="font-serif text-[34px] leading-none tracking-tightest mb-2 sm:text-[44px]">
               Approvals
             </h1>
             <p className="text-sm text-ink-3">

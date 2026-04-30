@@ -510,6 +510,21 @@ async def invoke(
             cost_cents=0,
         )
 
+    if business_id is not None:
+        owns_business = (
+            await db.execute(
+                select(Business.id).where(Business.id == business_id, Business.user_id == user_id)
+            )
+        ).scalar_one_or_none()
+        if owns_business is None:
+            return SpecialistResult(
+                specialist=specialist_name,
+                status="error",
+                summary="business not found for this user",
+                metadata={},
+                cost_cents=0,
+            )
+
     ctx = await _hydrate_context(db, user_id, business_id, session_id)
     try:
         result = await specialist.run(db, ctx, task)

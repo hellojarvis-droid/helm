@@ -24,7 +24,7 @@ from anthropic.types import (
 )
 from helm.agents import runtime as runtime_module
 from helm.auth import CurrentUser, require_user
-from helm.db.models import AgentEvent, User
+from helm.db.models import AgentEvent, AgentSession, Business, User
 from helm.main import create_app
 from helm.services.user_sync import sync_user_from_supabase
 from httpx import ASGITransport, AsyncClient
@@ -186,6 +186,131 @@ async def test_chat_turn_end_to_end(session, monkeypatch) -> None:
 
 @requires_db
 @pytest.mark.asyncio
+async def test_chat_history_returns_shared_thread_events(session) -> None:
+    user = User(supabase_id="sub-chat-history", email="history@example.com", tier="founder")
+    session.add(user)
+    await session.flush()
+    biz = Business(user_id=user.id, name="Candle", vertical="dtc_physical")
+    session.add(biz)
+    await session.flush()
+    ag = AgentSession(user_id=user.id, business_id=None, status="active")
+    session.add(ag)
+    await session.flush()
+    session.add_all(
+        [
+            AgentEvent(
+                session_id=ag.id,
+                business_id=biz.id,
+                event_type="message.user",
+                agent_name="user",
+                payload={"text": "What needs my approval?"},
+            ),
+            AgentEvent(
+                session_id=ag.id,
+                business_id=biz.id,
+                event_type="message.agent",
+                agent_name="ceo_agent",
+                payload={"text": "One launch spend is waiting.", "content_blocks": []},
+            ),
+            AgentEvent(
+                session_id=ag.id,
+                business_id=biz.id,
+                event_type="approval_requested",
+                agent_name="ceo_agent",
+                payload={
+                    "approval_id": "00000000-0000-0000-0000-000000000001",
+                    "kind": "spend",
+                    "summary": "Approve first-week ad budget.",
+                },
+            ),
+        ]
+    )
+    await session.commit()
+
+    fake_user = CurrentUser(
+        supabase_id="sub-chat-history", email="history@example.com", raw_claims={}
+    )
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: fake_user
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get("/chat/history", headers={"Authorization": "Bearer stub"})
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["session_id"] == str(ag.id)
+    assert [item["kind"] for item in body["items"]] == [
+        "message.user",
+        "message.agent",
+        "approval_requested",
+    ]
+    assert body["items"][0]["role"] == "user"
+    assert body["items"][0]["text"] == "What needs my approval?"
+    assert body["items"][1]["role"] == "agent"
+    assert body["items"][1]["text"] == "One launch spend is waiting."
+    assert body["items"][2]["approval"]["summary"] == "Approve first-week ad budget."
+
+
+@requires_db
+@pytest.mark.asyncio
+async def test_load_history_strips_historical_tool_use_blocks(session) -> None:
+    user = User(supabase_id="sub-chat-replay", email="replay@example.com", tier="founder")
+    session.add(user)
+    await session.flush()
+    ag = AgentSession(user_id=user.id, business_id=None, status="active")
+    session.add(ag)
+    await session.flush()
+    session.add_all(
+        [
+            AgentEvent(
+                session_id=ag.id,
+                business_id=None,
+                event_type="message.user",
+                agent_name="user",
+                payload={"text": "Ask finance to reconcile charges."},
+            ),
+            AgentEvent(
+                session_id=ag.id,
+                business_id=None,
+                event_type="message.agent",
+                agent_name="ceo_agent",
+                payload={
+                    "text": "",
+                    "content_blocks": [
+                        {
+                            "type": "tool_use",
+                            "id": "tu_old",
+                            "name": "delegate_to_specialist",
+                            "input": {"specialist_name": "finance_ops", "task": "reconcile"},
+                        }
+                    ],
+                },
+            ),
+            AgentEvent(
+                session_id=ag.id,
+                business_id=None,
+                event_type="tool_result",
+                agent_name="ceo_agent",
+                payload={"name": "delegate_to_specialist", "result": {"status": "ok"}},
+            ),
+        ]
+    )
+    await session.commit()
+
+    rt = runtime_module.MessagesRuntime(client=_stub_stream_client(text="ok"))
+    history = await rt._load_history(session, ag.id)
+
+    assert history[0] == {"role": "user", "content": "Ask finance to reconcile charges."}
+    assistant = history[1]
+    assert assistant["role"] == "assistant"
+    assert all(block.get("type") != "tool_use" for block in assistant["content"])
+    assert assistant["content"][0]["type"] == "text"
+    assert "completed" in assistant["content"][0]["text"]
+
+
+@requires_db
+@pytest.mark.asyncio
 async def test_chat_returns_error_when_kill_switch_is_on(session, monkeypatch) -> None:
     from helm.services import kill_switch
 
@@ -319,6 +444,59 @@ async def test_chat_delegates_to_stub_specialist(session, monkeypatch) -> None:
     assert len(rows) == 1
     assert rows[0].agent_name == "finance_ops"
     assert rows[0].payload["status"] == "not_implemented"
+
+
+@requires_db
+@pytest.mark.asyncio
+async def test_delegate_to_specialist_rejects_foreign_business(session, monkeypatch) -> None:
+    from helm.agents.specialists import base as specialists_base
+    from helm.agents.tools import ToolContext, _delegate_to_specialist
+
+    stub = specialists_base.StubSpecialist(
+        name="finance_ops",
+        persona_note="Finance & Ops",
+        what_i_would_do="reconcile charges",
+    )
+    monkeypatch.setitem(specialists_base._REGISTRY, "finance_ops", stub)
+
+    owner = User(supabase_id="sub-owner", email="owner@example.com", tier="founder")
+    caller = User(supabase_id="sub-caller", email="caller@example.com", tier="founder")
+    session.add_all([owner, caller])
+    await session.flush()
+    foreign_biz = Business(user_id=owner.id, name="Owner Co", vertical="dtc_physical")
+    session.add(foreign_biz)
+    await session.flush()
+    caller_session = AgentSession(user_id=caller.id, business_id=None, status="active")
+    session.add(caller_session)
+    await session.commit()
+
+    ctx = ToolContext(
+        db=session,
+        session_id=caller_session.id,
+        user_id=caller.id,
+        business_id=None,
+    )
+    result = await _delegate_to_specialist(
+        ctx,
+        {
+            "specialist_name": "finance_ops",
+            "task": "reconcile the other user's charges",
+            "business_id": str(foreign_biz.id),
+        },
+    )
+
+    assert result["status"] == "error"
+    assert "business not found" in result["summary"]
+    rows = (
+        (
+            await session.execute(
+                select(AgentEvent).where(AgentEvent.event_type == "specialist_completed")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows == []
 
 
 @requires_db

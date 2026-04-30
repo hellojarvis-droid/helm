@@ -6,7 +6,15 @@ import { ApprovalCard } from "@/components/chat/ApprovalCard";
 import { Icon } from "@/components/design/Icon";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import { apiFetch, type Business, listBusinesses, streamChat, type ChatEvent } from "@/lib/api";
+import {
+  apiFetch,
+  getChatHistory,
+  type Business,
+  type ChatHistoryItem,
+  listBusinesses,
+  streamChat,
+  type ChatEvent,
+} from "@/lib/api";
 
 type TurnPart =
   | { kind: "user"; text: string }
@@ -22,15 +30,36 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [scopedBizId, setScopedBizId] = useState<string | undefined>(undefined);
+  const [hydrated, setHydrated] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    let active = true;
     listBusinesses()
-      .then(setBusinesses)
+      .then((rows) => {
+        if (active) setBusinesses(rows);
+      })
       .catch(() => {
         // Silent: business picker is a nice-to-have. Without the list,
         // the user just gets the unscoped CEO conversation.
       });
+    getChatHistory()
+      .then((history) => {
+        if (!active) return;
+        const restored = history.items
+          .map(historyItemToPart)
+          .filter((p): p is TurnPart => p !== null);
+        setParts((current) => (current.length ? current : restored));
+      })
+      .catch(() => {
+        // Silent: a fresh account or transient auth issue should not block chat.
+      })
+      .finally(() => {
+        if (active) setHydrated(true);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function send() {
@@ -116,13 +145,14 @@ export default function ChatPage() {
     <AppShell breadcrumbs={["Helm", "Chat"]}>
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto scroll-paper">
-          <div className="max-w-3xl mx-auto px-8 py-8 flex flex-col gap-5">
-            {parts.length === 0 && !pending && (
+          <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-5 sm:px-8 sm:py-8">
+            {hydrated && parts.length === 0 && !pending && (
               <EmptyChat
                 onPick={(prompt) => setInput(prompt)}
                 hasBusinesses={businesses.length > 0}
               />
             )}
+            {!hydrated && <p className="text-sm text-ink-3">Loading Atlas thread…</p>}
             {parts.map((part, i) => (
               <TurnPartView key={i} part={part} onApproval={respond} />
             ))}
@@ -137,7 +167,7 @@ export default function ChatPage() {
         </div>
 
         <div className="border-t border-rule bg-paper-2">
-          <div className="max-w-3xl mx-auto px-8 py-4 space-y-3">
+          <div className="max-w-3xl mx-auto px-4 py-4 space-y-3 sm:px-8">
             {businesses.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 <BusinessPill
@@ -160,7 +190,7 @@ export default function ChatPage() {
                 e.preventDefault();
                 void send();
               }}
-              className="flex gap-2"
+              className="flex flex-col gap-2 sm:flex-row"
             >
               <input
                 className="flex-1 rounded-sm border border-rule bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:border-ink-2 disabled:opacity-50"
@@ -254,6 +284,54 @@ function BusinessPill({
       {label}
     </button>
   );
+}
+
+function historyItemToPart(item: ChatHistoryItem): TurnPart | null {
+  if (item.kind === "message.user" && item.text) {
+    return { kind: "user", text: item.text };
+  }
+  if (item.kind === "message.agent" && item.text) {
+    return { kind: "agent", text: item.text, toolCalls: [], costCents: 0 };
+  }
+  if (item.kind === "tool_call") {
+    const name = typeof item.payload.name === "string" ? item.payload.name : "tool";
+    return { kind: "tool", name, ok: true };
+  }
+  if (item.kind === "tool_result") {
+    const name = typeof item.payload.name === "string" ? item.payload.name : "tool";
+    return { kind: "tool", name, ok: item.payload.is_error !== true };
+  }
+  if (item.kind === "approval_requested" && item.approval?.approval_id) {
+    const details =
+      typeof item.payload.details === "object" && item.payload.details !== null
+        ? (item.payload.details as Record<string, unknown>)
+        : undefined;
+    return {
+      kind: "approval",
+      event: {
+        kind: "approval_requested",
+        approval_id: item.approval.approval_id,
+        approval_kind: item.approval.kind ?? "other",
+        summary: item.approval.summary ?? item.text ?? "Approval requested",
+        details,
+        business_id: item.business_id ?? "",
+        expires_at:
+          typeof item.payload.expires_at === "string" ? item.payload.expires_at : item.created_at,
+      },
+    };
+  }
+  if (
+    item.kind === "approval_approved" ||
+    item.kind === "approval_denied" ||
+    item.kind === "approval_modified"
+  ) {
+    return {
+      kind: "tool",
+      name: item.kind.replace("approval_", "approval:"),
+      ok: item.kind !== "approval_denied",
+    };
+  }
+  return null;
 }
 
 function TurnPartView({

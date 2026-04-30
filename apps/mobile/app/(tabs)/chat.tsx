@@ -15,11 +15,13 @@ import {
 import { MicButton } from "@/components/MicButton";
 import { PausedBanner } from "@/components/PausedBanner";
 import {
+  getChatHistory,
   listBusinesses,
   respondToApproval,
   streamChatTurn,
   type Business,
   type ChatEvent,
+  type ChatHistoryItem,
 } from "@/lib/api";
 import { colors } from "@/lib/colors";
 
@@ -50,15 +52,36 @@ export default function ChatScreen() {
   const [micAvailable, setMicAvailable] = useState(true);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [scopedBizId, setScopedBizId] = useState<string | undefined>(undefined);
+  const [hydrated, setHydrated] = useState(false);
   const listRef = useRef<FlatList<TurnPart>>(null);
 
   useEffect(() => {
+    let active = true;
     listBusinesses()
-      .then(setBusinesses)
+      .then((rows) => {
+        if (active) setBusinesses(rows);
+      })
       .catch(() => {
         // Silent — picker is optional. Without the list, chat falls back
         // to unscoped CEO conversation.
       });
+    getChatHistory()
+      .then((history) => {
+        if (!active) return;
+        const restored = history.items
+          .map(historyItemToPart)
+          .filter((p): p is TurnPart => p !== null);
+        setParts((current) => (current.length ? current : restored));
+      })
+      .catch(() => {
+        // Silent — a missing session should not block the live composer.
+      })
+      .finally(() => {
+        if (active) setHydrated(true);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -177,7 +200,9 @@ export default function ChatScreen() {
         contentContainerStyle={styles.list}
         renderItem={({ item }) => <PartView part={item} onRespond={respond} />}
         ListEmptyComponent={
-          !pending ? (
+          !hydrated ? (
+            <Text style={styles.empty}>Loading Atlas thread...</Text>
+          ) : !pending ? (
             <EmptyChat onPick={(p) => setInput(p)} hasBusinesses={businesses.length > 0} />
           ) : null
         }
@@ -240,6 +265,51 @@ export default function ChatScreen() {
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+function historyItemToPart(item: ChatHistoryItem): TurnPart | null {
+  if (item.kind === "message.user" && item.text) {
+    return { kind: "user", text: item.text };
+  }
+  if (item.kind === "message.agent" && item.text) {
+    return { kind: "agent", text: item.text, toolCalls: [], costCents: 0 };
+  }
+  if (item.kind === "tool_call") {
+    const name = typeof item.payload.name === "string" ? item.payload.name : "tool";
+    return { kind: "tool", name, ok: true };
+  }
+  if (item.kind === "tool_result") {
+    const name = typeof item.payload.name === "string" ? item.payload.name : "tool";
+    return { kind: "tool", name, ok: item.payload.is_error !== true };
+  }
+  if (item.kind === "approval_requested" && item.approval?.approval_id) {
+    const details =
+      typeof item.payload.details === "object" && item.payload.details !== null
+        ? (item.payload.details as Record<string, unknown>)
+        : undefined;
+    return {
+      kind: "approval",
+      approval_id: item.approval.approval_id,
+      approval_kind: item.approval.kind ?? "other",
+      summary: item.approval.summary ?? item.text ?? "Approval requested",
+      details,
+      business_id: item.business_id ?? "",
+      expires_at:
+        typeof item.payload.expires_at === "string" ? item.payload.expires_at : item.created_at,
+    };
+  }
+  if (
+    item.kind === "approval_approved" ||
+    item.kind === "approval_denied" ||
+    item.kind === "approval_modified"
+  ) {
+    return {
+      kind: "tool",
+      name: item.kind.replace("approval_", "approval:"),
+      ok: item.kind !== "approval_denied",
+    };
+  }
+  return null;
 }
 
 function PartView({

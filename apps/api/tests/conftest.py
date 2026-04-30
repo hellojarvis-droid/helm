@@ -40,7 +40,8 @@ requires_db = pytest.mark.skipif(
 
 _TRUNCATE_SQL = (
     "TRUNCATE users, businesses, agent_sessions, agent_events, "
-    "approvals, agent_memories, integrations RESTART IDENTITY CASCADE"
+    "approvals, agent_memories, integrations, business_launches, launch_steps "
+    "RESTART IDENTITY CASCADE"
 )
 
 

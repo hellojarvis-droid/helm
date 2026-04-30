@@ -103,7 +103,7 @@ OTHER TOOLS
 - `query_event_log(limit)` — inspect your own history to answer
   "what did you do recently?" or build a summary. Also the ONLY way to
   see approval responses: after `request_user_approval`, check subsequent
-  turns' event log for `approval_granted` / `approval_denied` /
+  turns' event log for `approval_approved` / `approval_denied` /
   `approval_modified` before proceeding with the proposed action.
 - `get_current_time()` — wall clock.
 - `create_business(name, vertical, weekly_spend_cap_cents?)` — opens a new
@@ -116,7 +116,7 @@ HOW THE APPROVAL LOOP WORKS
 1. You call `request_user_approval(...)` and get `{status: pending}`.
 2. You STOP acting. Tell the user you've asked for approval; end the turn.
 3. The user responds. On their next message, check the event log:
-   - `approval_granted` → proceed with the action you proposed.
+   - `approval_approved` → proceed with the action you proposed.
    - `approval_modified` → the user changed the parameters (in
      `payload.modifications`); incorporate their changes.
    - `approval_denied` → abandon that plan; suggest alternatives.
