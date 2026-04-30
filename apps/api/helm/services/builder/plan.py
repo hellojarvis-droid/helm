@@ -85,7 +85,7 @@ async def generate(
         system=PLAN_SYSTEM,
         user_message=user_message,
         estimate_cents=estimate,
-        max_tokens=2200,
+        max_tokens=8000,
     )
     if not isinstance(parsed, dict):
         raise _llm.BuilderLLMError("plan: expected JSON object")

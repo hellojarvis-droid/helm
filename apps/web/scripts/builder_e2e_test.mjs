@@ -41,10 +41,15 @@ async function main() {
   console.log("→ acquiring Supabase session via REST");
   // Hit Supabase auth directly to get tokens without the React form.
   const fs = await import("node:fs");
-  const envText = fs.readFileSync(
-    "/Users/jarvis/code/helm/.env.local",
-    "utf8",
-  );
+  const path = await import("node:path");
+  const url = await import("node:url");
+  // Resolve .env.local relative to this script (apps/web/scripts/) so the
+  // test isn't tied to whatever absolute path the author had on their box.
+  const here = path.dirname(url.fileURLToPath(import.meta.url));
+  const envPath = process.env.HELM_ENV_FILE
+    ? path.resolve(process.env.HELM_ENV_FILE)
+    : path.resolve(here, "..", "..", "..", ".env.local");
+  const envText = fs.readFileSync(envPath, "utf8");
   const envMap = Object.fromEntries(
     envText
       .split("\n")

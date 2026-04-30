@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { use, useEffect, useState } from "react";
-import { ActivityFeed } from "@/components/ActivityFeed";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/design/Icon";
 import { EditCapsModal } from "@/components/EditCapsModal";
@@ -303,23 +302,22 @@ export default function BusinessDetailPage({ params }: PageProps) {
             </div>
           </Card>
 
-          <Card className="col-span-12">
-            <CardHeader>
-              <CardTitle>Activity</CardTitle>
-              <CardDescription>
-                Every tool call, approval, and spend. Event-sourced — this is the record.
-              </CardDescription>
-            </CardHeader>
-            <ActivityFeed businessId={id} />
-          </Card>
         </div>
 
-        <Link
-          href="/businesses"
-          className="text-sm text-ink-3 hover:text-ink inline-block mt-8"
-        >
-          ← All businesses
-        </Link>
+        <div className="mt-8 flex items-center gap-5">
+          <Link
+            href="/businesses"
+            className="text-sm text-ink-3 hover:text-ink"
+          >
+            ← All businesses
+          </Link>
+          <Link
+            href={`/events?business_id=${id}`}
+            className="text-sm text-ink-3 hover:text-ink inline-flex items-center gap-1.5"
+          >
+            <Icon name="book" size={13} /> View activity log
+          </Link>
+        </div>
       </div>
 
       {editCapsOpen && biz ? (

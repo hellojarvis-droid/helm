@@ -68,8 +68,16 @@ async def apply(
         model=_MODEL,
         system=EXECUTE_SYSTEM,
         user_message=user_message,
+        # Realistic cost: input ~5K toks ($0.015) + output 2-15K toks ($0.03-0.22).
+        # 30c estimate → 36c reservation comfortably covers typical runs;
+        # if the actual call exceeds the reserve, credits.commit still
+        # debits the true cost (the reserve is a balance gate, not a hard
+        # ceiling).
         estimate_cents=30,
-        max_tokens=6000,
+        # Sonnet 4.6 supports 64K output tokens. Lower ceilings truncated
+        # full-file static-site responses, and the shared JSON extractor used
+        # to mistake the first complete inner object for a successful result.
+        max_tokens=64000,
     )
     if not isinstance(parsed, list):
         raise _llm.BuilderLLMError("execute: expected JSON array of ops")

@@ -4,43 +4,50 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { Icon } from "@/components/design/Icon";
 import { cn } from "@/lib/cn";
 import { type AgentEvent, type Business, listAllEvents, listBusinesses } from "@/lib/api";
 
-const EVENT_TYPES = [
-  "message.user",
-  "message.agent",
-  "tool_call",
-  "tool_result",
-  "specialist_completed",
-  "approval_requested",
-  "approval_approved",
-  "approval_denied",
-  "approval_modified",
-  "spend_authorized",
-  "spend_declined",
-  "revenue_received",
-  "launch_started",
-  "launch_step_started",
-  "launch_step_completed",
-  "launch_step_failed",
-  "launch_step_skipped",
-  "launch_completed",
-  "launch_failed",
-  "scheduled_job_started",
-  "scheduled_job_completed",
-  "sync_push_ok",
-  "sync_push_failed",
-  "sync_pull_ok",
-  "sync_pull_failed",
-  "sync_pull_conflict",
-  "render_job_queued",
-  "render_job_running",
-  "render_job_completed",
-  "render_job_failed",
-  "kill_switch_activated",
-];
+// Friendly labels keyed by raw event_type. Anything not listed falls through
+// to a humanized version of the type string. The user never sees the raw
+// snake_case identifier — that detail lives behind the chip color.
+const PRETTY_LABEL: Record<string, string> = {
+  "message.user": "You said",
+  "message.agent": "Atlas replied",
+  tool_call: "Tool used",
+  tool_result: "Tool result",
+  specialist_completed: "Specialist finished",
+  approval_requested: "Approval needed",
+  approval_approved: "Approved",
+  approval_denied: "Denied",
+  approval_modified: "Approved with changes",
+  spend_intent: "Spend intent",
+  spend_authorized: "Spend approved",
+  spend_declined: "Spend declined",
+  revenue_received: "Revenue",
+  launch_started: "Launch started",
+  launch_step_started: "Launch step started",
+  launch_step_completed: "Launch step done",
+  launch_step_failed: "Launch step failed",
+  launch_step_skipped: "Launch step skipped",
+  launch_completed: "Launch complete",
+  launch_failed: "Launch failed",
+  scheduled_job_started: "Scheduled job started",
+  scheduled_job_completed: "Scheduled job done",
+  sync_push_ok: "Synced to provider",
+  sync_push_failed: "Sync push failed",
+  sync_pull_ok: "Pulled from provider",
+  sync_pull_failed: "Sync pull failed",
+  sync_pull_conflict: "Sync conflict resolved",
+  render_job_queued: "Render queued",
+  render_job_running: "Render started",
+  render_job_completed: "Render finished",
+  render_job_failed: "Render failed",
+  kill_switch_activated: "Kill switch",
+  computer_use_requested: "Computer use queued",
+  error: "Error",
+};
+
+const EVENT_TYPES = Object.keys(PRETTY_LABEL);
 
 export default function EventsPage() {
   return (
@@ -108,15 +115,15 @@ function EventsContent() {
   const oldestId = rows?.[rows.length - 1]?.id;
 
   return (
-    <AppShell breadcrumbs={["Helm", "Events"]}>
+    <AppShell breadcrumbs={["Helm", "Logs"]}>
       <div className="px-10 pt-8 pb-20 max-w-5xl">
         <header className="mb-7">
           <h1 className="font-serif text-[44px] leading-none tracking-tightest mb-2">
-            Events
+            Logs
           </h1>
           <p className="text-sm text-ink-3 max-w-prose">
-            The event-sourced log of every agent action across your portfolio. Filterable — this
-            is the record you can replay.
+            Everything Atlas and the specialist agents have done across your businesses, in plain
+            English. Filter by business, agent, or activity type.
           </p>
         </header>
 
@@ -158,10 +165,10 @@ function EventsContent() {
             onChange={(e) => setEventType(e.target.value)}
             className="h-9 rounded-sm border border-rule bg-paper px-3 text-[13px] text-ink"
           >
-            <option value="">All event types</option>
+            <option value="">All activity</option>
             {EVENT_TYPES.map((t) => (
               <option key={t} value={t}>
-                {t}
+                {PRETTY_LABEL[t] ?? prettyFallback(t)}
               </option>
             ))}
           </select>
@@ -256,7 +263,9 @@ function EventRow({ row, businesses }: { row: AgentEvent; businesses: Business[]
         )}
       </td>
       <td className="px-4 py-3 text-[12px] align-top">
-        <span className={cn("chip", chipTone(row.event_type))}>{row.event_type}</span>
+        <span className={cn("chip", chipTone(row.event_type))}>
+          {PRETTY_LABEL[row.event_type] ?? prettyFallback(row.event_type)}
+        </span>
       </td>
       <td className="px-4 py-3 text-[13px] text-ink-2 align-top max-w-[540px]">
         <div className="truncate">{summarize(row)}</div>
@@ -356,7 +365,22 @@ function summarize(ev: AgentEvent): string {
       return `Render completed on ${String(p.provider ?? "provider")}`;
     case "render_job_failed":
       return `Render failed on ${String(p.provider ?? "provider")}: ${String(p.error ?? "")}`;
+    case "kill_switch_activated":
+      return "Kill switch activated — all agents halted.";
+    case "computer_use_requested":
+      return `Computer use queued${p.task ? `: ${String(p.task)}` : ""}`;
+    case "error":
+      return String(p.message ?? p.detail ?? "Something went wrong");
     default:
-      return JSON.stringify(p).slice(0, 200);
+      // Never dump raw JSON to the user. If we don't have a friendly summary
+      // for this event type, the chip + agent + timestamp tell the story;
+      // leave the body empty so the row stays clean.
+      return "";
   }
+}
+
+function prettyFallback(eventType: string): string {
+  return eventType
+    .replace(/[._]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -36,6 +36,7 @@ export default function BuilderWorkspace({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
+  const [applyingPlanId, setApplyingPlanId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -80,6 +81,7 @@ export default function BuilderWorkspace({ params }: PageProps) {
 
   const onApprove = async (planId: string) => {
     setBusy(true);
+    setApplyingPlanId(planId);
     setError(null);
     try {
       await approveBuilderPlan(planId);
@@ -87,8 +89,11 @@ export default function BuilderWorkspace({ params }: PageProps) {
       // Force the preview to re-mount with the new file tree.
       setPreviewKey((k) => k + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      await refresh();
+      setError(message);
     } finally {
+      setApplyingPlanId(null);
       setBusy(false);
     }
   };
@@ -171,6 +176,8 @@ export default function BuilderWorkspace({ params }: PageProps) {
                 plan={pl}
                 onApprove={() => onApprove(pl.id)}
                 onReject={() => onReject(pl.id)}
+                busy={busy}
+                applying={applyingPlanId === pl.id}
               />
             ))}
           <div ref={bottomRef} />
@@ -211,7 +218,7 @@ export default function BuilderWorkspace({ params }: PageProps) {
               onClick={onAsk}
               disabled={!prompt.trim() || busy}
             >
-              {busy ? "Thinking…" : "Ask Builder"}
+              {busy ? (applyingPlanId ? "Building..." : "Thinking…") : "Ask Builder"}
             </Button>
           </div>
         </footer>
@@ -291,10 +298,14 @@ function PlanTurn({
   plan,
   onApprove,
   onReject,
+  busy,
+  applying,
 }: {
   plan: BuilderPlan;
   onApprove: () => void;
   onReject: () => void;
+  busy: boolean;
+  applying: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -336,16 +347,24 @@ function PlanTurn({
           <button
             type="button"
             onClick={onReject}
-            className="rounded-sm border border-rule bg-paper px-2.5 py-1 text-[11px] text-ink-2 hover:bg-sand"
+            disabled={busy}
+            className={cn(
+              "rounded-sm border border-rule bg-paper px-2.5 py-1 text-[11px] text-ink-2 hover:bg-sand",
+              busy && "cursor-not-allowed opacity-60 hover:bg-paper",
+            )}
           >
             Not this one
           </button>
           <button
             type="button"
             onClick={onApprove}
-            className="rounded-sm border border-ink bg-ink px-3 py-1 text-[11px] text-paper hover:bg-terracotta hover:border-terracotta"
+            disabled={busy}
+            className={cn(
+              "rounded-sm border border-ink bg-ink px-3 py-1 text-[11px] text-paper hover:bg-terracotta hover:border-terracotta",
+              busy && "cursor-not-allowed opacity-60 hover:bg-ink hover:border-ink",
+            )}
           >
-            Looks good — apply
+            {applying ? "Building..." : "Looks good — apply"}
           </button>
         </div>
       )}

@@ -19,6 +19,7 @@ const PROTECTED = [
   "/onboarding",
   "/connections",
   "/studio",
+  "/builder",
 ];
 const AUTH_ROUTES = ["/sign-in", "/sign-up"];
 

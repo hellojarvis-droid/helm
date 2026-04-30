@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ConnectSheet } from "@/components/connections/ConnectSheet";
+import { ConnectorLogo } from "@/components/connections/ConnectorLogo";
 import { Icon } from "@/components/design/Icon";
 import { cn } from "@/lib/cn";
 import {
@@ -272,7 +273,7 @@ function IntegrationCard({
       className="text-left rounded-md border border-rule bg-paper p-5 hover:bg-paper-2 transition-colors group"
     >
       <div className="flex items-start gap-3">
-        <ConnectorIcon connector={connector} />
+        <ConnectorLogo connector={connector} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-[14px] font-medium truncate">{connector.name}</span>
@@ -348,24 +349,3 @@ function IntegrationCard({
   );
 }
 
-function ConnectorIcon({ connector }: { connector: ConnectorInfo }) {
-  const tone = {
-    Creative: "from-terracotta to-amber",
-    Commerce: "from-sage to-amber",
-    Payments: "from-ink to-terracotta",
-    Ads: "from-terracotta to-rose",
-    Social: "from-sage to-terracotta",
-    Ops: "from-ink-2 to-sage",
-    Communication: "from-amber to-sage",
-  }[connector.category];
-  return (
-    <div
-      className={cn(
-        "h-10 w-10 grid place-items-center rounded-md bg-gradient-to-br text-paper font-serif text-[18px] leading-none shrink-0",
-        tone,
-      )}
-    >
-      {connector.name[0]}
-    </div>
-  );
-}

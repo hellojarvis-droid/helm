@@ -59,6 +59,7 @@ class ConnectorInfo(BaseModel):
     connect_hint: str
     popularity: int
     cost_hint: str
+    icon_slug: str | None = None
 
 
 @router.get("/connectors/catalog", response_model=list[ConnectorInfo])

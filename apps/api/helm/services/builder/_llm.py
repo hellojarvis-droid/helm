@@ -29,6 +29,9 @@ class BuilderLLMError(Exception):
     """Layer couldn't produce parseable output or the API failed."""
 
 
+_DEFAULT_MAX_TOKENS = 8000
+
+
 # Token prices in cents per 1M tokens, aligned with other Helm services.
 _PRICES_CENTS: dict[str, tuple[int, int]] = {
     "claude-sonnet-4-6": (300, 1500),
@@ -54,7 +57,7 @@ async def run_step(
     system: str,
     user_message: str,
     estimate_cents: int,
-    max_tokens: int = 2000,
+    max_tokens: int = _DEFAULT_MAX_TOKENS,
 ) -> Any:
     """Run one LLM step end-to-end.
 
@@ -108,12 +111,18 @@ async def run_step(
 
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     try:
-        msg = await client.messages.create(
+        # Stream and collect the final Message. Required by the Anthropic
+        # SDK whenever max_tokens is high enough that a non-streaming call
+        # could exceed the 10-minute default timeout — Sonnet 4.6 at the
+        # 64K execute ceiling trips that guard. The returned `Message`
+        # object has the same shape as `messages.create()`.
+        async with client.messages.stream(
             model=model,
             max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": user_message}],
-        )
+        ) as stream:
+            msg = await stream.get_final_message()
     except anthropic.APIError as e:
         await credits.refund(
             db,
@@ -129,6 +138,9 @@ async def run_step(
     in_toks = msg.usage.input_tokens
     out_toks = msg.usage.output_tokens
     actual = cost_cents(model, in_toks, out_toks)
+    run.input_tokens = in_toks
+    run.output_tokens = out_toks
+    run.cost_cents = actual
     await credits.commit(
         db,
         user_id=user_id,
@@ -141,6 +153,13 @@ async def run_step(
     # Also bump the project's per-day spend so the cap enforces.
     project.daily_spend_cents = int(project.daily_spend_cents or 0) + actual
     await db.commit()
+
+    stop_reason = getattr(msg, "stop_reason", None)
+    if stop_reason == "max_tokens":
+        run.status = "failed"
+        run.error = f"{step}: response hit max_tokens ({max_tokens}) before completing JSON"
+        await db.commit()
+        raise BuilderLLMError(run.error)
 
     text = "".join(
         getattr(b, "text", "") for b in msg.content if getattr(b, "type", "") == "text"
@@ -155,9 +174,6 @@ async def run_step(
         )
 
     run.status = "completed"
-    run.input_tokens = in_toks
-    run.output_tokens = out_toks
-    run.cost_cents = actual
     # BuilderRun.output is typed as dict; wrap list outputs.
     run.output = parsed if isinstance(parsed, dict) else {"items": parsed}
     await db.commit()
@@ -166,29 +182,28 @@ async def run_step(
 
 def _extract_json(text: str) -> dict[str, Any] | list[Any] | None:
     """Pull the first JSON object or array out of a model response."""
+    stripped = text.strip()
+    if not stripped:
+        return None
     try:
-        obj = json.loads(text)
+        obj = json.loads(stripped)
         if isinstance(obj, (dict, list)):
             return obj
-    except Exception:
+    except json.JSONDecodeError:
         pass
-    # Walk for balanced {...} or [...].
-    for opener, closer in (("{", "}"), ("[", "]")):
-        start = text.find(opener)
-        if start < 0:
-            continue
-        depth = 0
-        for i in range(start, len(text)):
-            ch = text[i]
-            if ch == opener:
-                depth += 1
-            elif ch == closer:
-                depth -= 1
-                if depth == 0:
-                    try:
-                        obj = json.loads(text[start : i + 1])
-                        if isinstance(obj, (dict, list)):
-                            return obj
-                    except Exception:
-                        break
+
+    starts = [i for i, ch in enumerate(text) if ch in "{["]
+    if not starts:
+        return None
+
+    # Decode only from the first JSON-looking opener. If the intended top-level
+    # value is a truncated array, falling through to an inner object makes the
+    # caller treat a partial model response as a successful run.
+    decoder = json.JSONDecoder()
+    try:
+        obj, _ = decoder.raw_decode(text[min(starts) :])
+    except json.JSONDecodeError:
+        return None
+    if isinstance(obj, (dict, list)):
+        return obj
     return None

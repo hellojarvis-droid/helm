@@ -54,6 +54,7 @@ from helm.services.builder import (
     templates,
     versioning,
 )
+from helm.services.credits import InsufficientCreditsError
 from helm.services.user_sync import sync_user_from_supabase
 
 router = APIRouter(tags=["builder"])
@@ -429,6 +430,17 @@ async def propose_plan(
             user_id=user_row.id,
             user_prompt=body.user_prompt,
         )
+    except InsufficientCreditsError as e:
+        raise ClientError(
+            "insufficient_credits",
+            status_code=402,
+            message=(
+                f"Not enough credits to plan this change "
+                f"(${e.balance_cents / 100:.2f} available, "
+                f"~${e.needed_cents / 100:.2f} needed). "
+                "Top up in Settings → Billing."
+            ),
+        ) from e
     except orchestrator.DailySpendCapError as e:
         raise ClientError(
             "daily_spend_cap_reached",
@@ -501,6 +513,17 @@ async def approve_plan(
     await _project_for_user(db, user_row.id, plan_row.project_id)
     try:
         await orchestrator.apply_plan(db, plan_id=plan_id, user_id=user_row.id)
+    except InsufficientCreditsError as e:
+        raise ClientError(
+            "insufficient_credits",
+            status_code=402,
+            message=(
+                f"Not enough credits to apply this plan "
+                f"(${e.balance_cents / 100:.2f} available, "
+                f"~${e.needed_cents / 100:.2f} needed). "
+                "Top up in Settings → Billing."
+            ),
+        ) from e
     except orchestrator.DailySpendCapError as e:
         raise ClientError(
             "daily_spend_cap_reached",

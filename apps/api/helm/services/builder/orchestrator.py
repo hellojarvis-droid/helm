@@ -164,7 +164,11 @@ async def apply_plan(
         log.exception("builder.apply.execute_failed", plan_id=str(plan_id))
         plan_row.status = "failed"
         plan_row.error = str(e)[:300]
-        await db.flush()
+        # Commit the failed status before re-raising. Without this the
+        # session rolls back when the route turns the exception into a
+        # 502, the plan stays "proposed", and the UI shows no error —
+        # the user just sees "nothing happened."
+        await db.commit()
         raise BuilderError(f"execute failed: {e}") from e
 
     # 3. Map ops onto writes/deletes.

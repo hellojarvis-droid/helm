@@ -47,7 +47,7 @@ async def summarize(
             system=EXPLAIN_SYSTEM + "\nReturn ONLY a JSON object: {\"summary\": \"...\"}",
             user_message=user_message,
             estimate_cents=1,
-            max_tokens=400,
+            max_tokens=1000,
         )
     except _llm.BuilderLLMError:
         # Fall back to a stub sentence if the explain step fails —

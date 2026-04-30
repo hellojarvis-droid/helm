@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { ConnectorLogo } from "@/components/connections/ConnectorLogo";
 import { Icon } from "@/components/design/Icon";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -58,9 +59,7 @@ export function ConnectSheet({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 mb-5">
-          <div className="h-10 w-10 grid place-items-center rounded-md bg-gradient-to-br from-terracotta to-amber text-paper font-serif text-[18px] leading-none shrink-0">
-            {connector.name[0]}
-          </div>
+          <ConnectorLogo connector={connector} />
           <div className="flex-1 min-w-0">
             <h2 className="text-[18px] font-semibold">{connector.name}</h2>
             <p className="text-sm text-ink-3 mt-0.5">{connector.description}</p>
@@ -256,3 +255,4 @@ function OauthForm({
     </div>
   );
 }
+

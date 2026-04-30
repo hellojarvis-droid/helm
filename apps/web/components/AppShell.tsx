@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AtlasDock } from "@/components/chat/AtlasDock";
 import { BalanceChip } from "@/components/credits/BalanceChip";
+import { BusinessSwitcher } from "@/components/BusinessSwitcher";
 import { Icon, type IconName } from "@/components/design/Icon";
 import { KillSwitchBanner } from "@/components/KillSwitchBanner";
 import { cn } from "@/lib/cn";
@@ -16,39 +17,16 @@ interface NavItem {
   dot?: "terracotta" | "amber";
 }
 
-interface NavSection {
-  group: string;
-  items: NavItem[];
-}
-
-const NAV: NavSection[] = [
-  {
-    group: "Operate",
-    items: [
-      { href: "/today", label: "Today", icon: "home" },
-      { href: "/businesses", label: "Businesses", icon: "chart" },
-      { href: "/money", label: "Money", icon: "receipt" },
-      { href: "/approvals", label: "Approvals", icon: "check", dot: "terracotta" },
-    ],
-  },
-  {
-    group: "Swarm",
-    items: [
-      { href: "/chat", label: "Chat with Atlas", icon: "sparkle" },
-      { href: "/builder", label: "Builder", icon: "folder" },
-      { href: "/studio", label: "Creative Studio", icon: "video" },
-      { href: "/agents", label: "Agents", icon: "users" },
-      { href: "/events", label: "Events", icon: "book" },
-    ],
-  },
-  {
-    group: "Account",
-    items: [
-      { href: "/connections", label: "Connections", icon: "tweaks" },
-      { href: "/safety", label: "Safety", icon: "shield" },
-      { href: "/billing", label: "Billing", icon: "card" },
-    ],
-  },
+const NAV: NavItem[] = [
+  { href: "/today", label: "Today", icon: "home" },
+  { href: "/money", label: "Money", icon: "receipt" },
+  { href: "/approvals", label: "Approvals", icon: "check", dot: "terracotta" },
+  { href: "/builder", label: "Builder", icon: "folder" },
+  { href: "/studio", label: "Creative Studio", icon: "video" },
+  { href: "/agents", label: "Agents", icon: "users" },
+  { href: "/connections", label: "Connections", icon: "tweaks" },
+  { href: "/safety", label: "Safety", icon: "shield" },
+  { href: "/billing", label: "Billing", icon: "card" },
 ];
 
 export interface AppShellProps {
@@ -90,7 +68,7 @@ function Sidebar({ pathname, initials }: { pathname: string; initials: string })
   }
 
   return (
-    <aside className="bg-paper-2 border-r border-rule flex flex-col gap-6 px-4 py-5 overflow-hidden">
+    <aside className="bg-paper-2 border-r border-rule flex flex-col gap-5 px-4 py-5 overflow-hidden">
       <Link href="/today" className="flex items-center gap-2.5 px-1.5 py-1 hover:opacity-90">
         <div className="h-7 w-7 grid place-items-center rounded-md bg-ink text-paper font-serif text-[20px] leading-none">
           H
@@ -103,39 +81,34 @@ function Sidebar({ pathname, initials }: { pathname: string; initials: string })
         </div>
       </Link>
 
-      {NAV.map((section) => (
-        <div key={section.group} className="flex flex-col gap-0.5">
-          <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-ink-3 px-2.5 pt-2 pb-1">
-            {section.group}
-          </div>
-          {section.items.map((item) => {
-            const active = isActive(pathname, item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[14px] transition-colors",
-                  active
-                    ? "bg-ink text-paper"
-                    : "text-ink-2 hover:bg-sand hover:text-ink",
-                )}
-              >
-                <Icon name={item.icon} size={16} className="opacity-80" />
-                <span className="flex-1">{item.label}</span>
-                {item.dot && (
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 rounded-full",
-                      item.dot === "terracotta" ? "bg-terracotta" : "bg-amber",
-                    )}
-                  />
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
+      <nav className="flex flex-col gap-0.5">
+        {NAV.map((item) => {
+          const active = isActive(pathname, item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[14px] transition-colors",
+                active
+                  ? "bg-ink text-paper"
+                  : "text-ink-2 hover:bg-sand hover:text-ink",
+              )}
+            >
+              <Icon name={item.icon} size={16} className="opacity-80" />
+              <span className="flex-1">{item.label}</span>
+              {item.dot && (
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    item.dot === "terracotta" ? "bg-terracotta" : "bg-amber",
+                  )}
+                />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
 
       <div className="mt-auto flex flex-col gap-2">
         <Link
@@ -152,6 +125,18 @@ function Sidebar({ pathname, initials }: { pathname: string; initials: string })
           </div>
           <Icon name="sparkle" size={14} />
         </Link>
+        <Link
+          href="/events"
+          className={cn(
+            "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] transition-colors",
+            isActive(pathname, "/events")
+              ? "bg-ink text-paper"
+              : "text-ink-2 hover:bg-sand hover:text-ink",
+          )}
+        >
+          <Icon name="book" size={15} className="opacity-80" />
+          <span className="flex-1">Logs</span>
+        </Link>
         <button
           onClick={signOut}
           className="text-[12px] text-ink-3 hover:text-ink text-left px-2.5 py-1"
@@ -166,6 +151,7 @@ function Sidebar({ pathname, initials }: { pathname: string; initials: string })
 function Topbar({ crumbs, initials }: { crumbs: string[]; initials: string }) {
   return (
     <div className="flex items-center gap-4 px-7 py-3.5 border-b border-rule bg-paper">
+      <BusinessSwitcher />
       <div className="text-[13px] text-ink-3">
         {crumbs.map((c, i) => (
           <span key={i}>
@@ -221,7 +207,7 @@ function deriveCrumbs(pathname: string): string[] {
     safety: "Safety",
     billing: "Billing",
     agents: "Agents",
-    events: "Events",
+    events: "Logs",
     money: "Money",
     onboarding: "New venture",
     connections: "Connections",

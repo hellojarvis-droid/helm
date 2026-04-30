@@ -319,6 +319,7 @@ export interface ConnectorInfo {
   connect_hint: string;
   popularity: number;
   cost_hint: string;
+  icon_slug: string | null;
 }
 
 export async function getConnectorCatalog(): Promise<ConnectorInfo[]> {
@@ -2071,7 +2072,7 @@ export async function proposeBuilderPlan(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ user_prompt }),
   });
-  if (!res.ok) throw new Error(`proposeBuilderPlan: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "proposeBuilderPlan");
   return (await res.json()) as BuilderPlan;
 }
 
@@ -2083,10 +2084,7 @@ export async function listBuilderPlans(projectId: string): Promise<BuilderPlan[]
 
 export async function approveBuilderPlan(planId: string): Promise<BuilderPlan> {
   const res = await apiFetch(`/builder/plans/${planId}/approve`, { method: "POST" });
-  if (res.status === 402) {
-    throw new Error("daily spend cap hit — raise the cap or try tomorrow");
-  }
-  if (!res.ok) throw new Error(`approveBuilderPlan: ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, "approveBuilderPlan");
   return (await res.json()) as BuilderPlan;
 }
 
