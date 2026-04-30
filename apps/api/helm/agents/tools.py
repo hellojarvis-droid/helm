@@ -7,6 +7,7 @@ Tools the CEO Agent can invoke mid-turn:
   - request_user_approval (insert row + emit SSE event)
   - create_business (insert businesses row, after approval)
   - request_spend (record spending intent before a merchant purchase)
+  - escalate_to_computer_use (queue a desktop sandbox task)
 
 Every tool implementation takes a `ToolContext` carrying the tenant scope, the
 DB session, and an output list for side-channel SSE events (used by the
@@ -28,6 +29,7 @@ from helm.db.models import Approval, Business, User
 from helm.services import event_log, push
 
 _VERTICALS = {"dtc_physical", "dtc_pod", "saas", "services"}
+_APPROVAL_KINDS = ("spend", "publish", "delete", "other")
 
 if TYPE_CHECKING:
     from helm.agents.runtime import ChatEvent
@@ -225,7 +227,7 @@ CEO_TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "kind": {
                     "type": "string",
-                    "enum": ["spend", "publish", "delete", "other"],
+                    "enum": list(_APPROVAL_KINDS),
                     "description": "Category of action for UI grouping.",
                 },
                 "summary": {
@@ -302,6 +304,46 @@ CEO_TOOLS: list[dict[str, Any]] = [
 # ────────────────────────────────────────────────────────────────────
 
 
+def _parse_business_id(args: dict[str, Any]) -> uuid.UUID | dict[str, Any]:
+    """Return a UUID on success, an error-shaped dict on failure."""
+    biz_arg = args.get("business_id")
+    if not isinstance(biz_arg, str) or not biz_arg:
+        return {"status": "error", "summary": "business_id is required"}
+    try:
+        return uuid.UUID(biz_arg)
+    except ValueError:
+        return {
+            "status": "error",
+            "summary": f"business_id '{biz_arg}' is not a valid UUID",
+        }
+
+
+async def _resolve_owned_business(
+    ctx: ToolContext, args: dict[str, Any]
+) -> uuid.UUID | dict[str, Any]:
+    """Parse business_id and confirm it belongs to the caller.
+
+    The CEO session is already user-scoped, but tool args come from the
+    model — verify ownership before any write.
+    """
+    parsed = _parse_business_id(args)
+    if isinstance(parsed, dict):
+        return parsed
+    row = await ctx.db.execute(
+        select(Business.id).where(Business.id == parsed, Business.user_id == ctx.user_id)
+    )
+    if row.scalar_one_or_none() is None:
+        return {"status": "error", "summary": "business not found for this user"}
+    return parsed
+
+
+def _require_str(args: dict[str, Any], key: str) -> str | dict[str, Any]:
+    val = args.get(key)
+    if not isinstance(val, str) or not val.strip():
+        return {"status": "error", "summary": f"{key} is required"}
+    return val.strip()
+
+
 async def _get_current_time(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     return {"utc_iso": datetime.now(UTC).isoformat()}
 
@@ -338,6 +380,8 @@ async def _delegate_to_specialist(ctx: ToolContext, args: dict[str, Any]) -> dic
                 "metadata": {},
                 "cost_cents": 0,
             }
+    # Note: this tool keeps its own UUID parsing because it returns a
+    # specialist-shaped error envelope (with `metadata` + `cost_cents`).
 
     result = await invoke_specialist(
         ctx.db,
@@ -353,27 +397,41 @@ async def _delegate_to_specialist(ctx: ToolContext, args: dict[str, Any]) -> dic
 async def _request_user_approval(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     from helm.agents.runtime import ChatEvent  # local import avoids circular
 
-    biz_arg = args.get("business_id")
-    if not isinstance(biz_arg, str) or not biz_arg:
-        return {"status": "error", "summary": "business_id is required"}
-    try:
-        biz_id = uuid.UUID(biz_arg)
-    except ValueError:
-        return {"status": "error", "summary": f"business_id '{biz_arg}' is not a valid UUID"}
+    biz_id = await _resolve_owned_business(ctx, args)
+    if isinstance(biz_id, dict):
+        return biz_id
 
-    expires_hours = int(args.get("expires_in_hours", 24))
+    summary = _require_str(args, "summary")
+    if isinstance(summary, dict):
+        return summary
+
+    kind = args.get("kind", "other")
+    if kind not in _APPROVAL_KINDS:
+        return {
+            "status": "error",
+            "summary": f"kind must be one of {list(_APPROVAL_KINDS)}",
+        }
+
+    expires_raw = args.get("expires_in_hours", 24)
+    if isinstance(expires_raw, bool) or not isinstance(expires_raw, int) or expires_raw <= 0:
+        return {"status": "error", "summary": "expires_in_hours must be a positive integer"}
+
+    details = args.get("details")
+    if details is not None and not isinstance(details, dict):
+        return {"status": "error", "summary": "details must be an object if provided"}
+
     row = Approval(
         business_id=biz_id,
-        kind=args.get("kind", "other"),
-        summary=args["summary"],
-        details=args.get("details") or {},
+        kind=kind,
+        summary=summary,
+        details=details or {},
         status="pending",
-        expires_at=datetime.now(UTC) + timedelta(hours=expires_hours),
+        expires_at=datetime.now(UTC) + timedelta(hours=expires_raw),
     )
     ctx.db.add(row)
-    await ctx.db.commit()
-    await ctx.db.refresh(row)
-
+    # Approval row + audit event must land or roll back together. Network
+    # I/O (SSE emit, push) happens after commit and is best-effort.
+    await ctx.db.flush()
     await event_log.write(
         ctx.db,
         session_id=ctx.session_id,
@@ -385,7 +443,9 @@ async def _request_user_approval(ctx: ToolContext, args: dict[str, Any]) -> dict
             "kind": row.kind,
             "summary": row.summary,
         },
+        commit=False,
     )
+    await ctx.db.commit()
 
     ctx.events_out.append(
         ChatEvent(
@@ -451,9 +511,9 @@ async def _create_business(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
         status="initializing",
     )
     ctx.db.add(biz)
-    await ctx.db.commit()
-    await ctx.db.refresh(biz)
-
+    # Flush populates biz.id without committing, so the audit event lands
+    # in the same transaction as the row it describes (CLAUDE.md rule #4).
+    await ctx.db.flush()
     await event_log.write(
         ctx.db,
         session_id=ctx.session_id,
@@ -466,7 +526,9 @@ async def _create_business(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
             "vertical": biz.vertical,
             "weekly_spend_cap_cents": biz.weekly_spend_cap_cents,
         },
+        commit=False,
     )
+    await ctx.db.commit()
     return {
         "status": "ok",
         "business_id": str(biz.id),
@@ -478,44 +540,31 @@ async def _create_business(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
 
 
 async def _request_spend(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
-    biz_arg = args.get("business_id")
-    if not isinstance(biz_arg, str) or not biz_arg:
-        return {"status": "error", "summary": "business_id is required"}
-    try:
-        biz_id = uuid.UUID(biz_arg)
-    except ValueError:
-        return {"status": "error", "summary": f"business_id '{biz_arg}' is not a valid UUID"}
+    biz = await _resolve_owned_business(ctx, args)
+    if isinstance(biz, dict):
+        return biz
 
     amount = args.get("amount_cents")
     if not isinstance(amount, int) or amount <= 0:
         return {"status": "error", "summary": "amount_cents must be a positive integer"}
 
-    merchant = args.get("merchant_hint")
-    purpose = args.get("purpose")
-    if not isinstance(merchant, str) or not merchant.strip():
-        return {"status": "error", "summary": "merchant_hint is required"}
-    if not isinstance(purpose, str) or not purpose.strip():
-        return {"status": "error", "summary": "purpose is required"}
-
-    # Verify the business belongs to the caller (defense-in-depth; the CEO
-    # session is already user-scoped but args come from the model).
-    biz_row = await ctx.db.execute(
-        select(Business).where(Business.id == biz_id, Business.user_id == ctx.user_id)
-    )
-    biz = biz_row.scalar_one_or_none()
-    if biz is None:
-        return {"status": "error", "summary": "business not found for this user"}
+    merchant = _require_str(args, "merchant_hint")
+    if isinstance(merchant, dict):
+        return merchant
+    purpose = _require_str(args, "purpose")
+    if isinstance(purpose, dict):
+        return purpose
 
     logged = await event_log.write(
         ctx.db,
         session_id=ctx.session_id,
-        business_id=biz_id,
+        business_id=biz,
         event_type="spend_intent",
         agent_name="ceo_agent",
         payload={
             "amount_cents": amount,
-            "merchant_hint": merchant.strip(),
-            "purpose": purpose.strip(),
+            "merchant_hint": merchant,
+            "purpose": purpose,
         },
     )
     return {
@@ -531,42 +580,24 @@ async def _request_spend(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
 
 
 async def _escalate_to_computer_use(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
-    """Queue a computer-use task for the desktop app to pick up.
+    biz = await _resolve_owned_business(ctx, args)
+    if isinstance(biz, dict):
+        return biz
 
-    Today this is interface-only: writes a `computer_use_requested` event,
-    returns queued. The desktop app (apps/desktop) wires the actual
-    sandbox + screen-stream when the signed builds + Tauri auto-updater
-    land per BUILD_PLAN Phase 6.
-    """
-    biz_arg = args.get("business_id")
-    if not isinstance(biz_arg, str) or not biz_arg:
-        return {"status": "error", "summary": "business_id is required"}
-    try:
-        biz_id = uuid.UUID(biz_arg)
-    except ValueError:
-        return {"status": "error", "summary": f"business_id '{biz_arg}' is not a valid UUID"}
-
-    task = args.get("task")
-    app_hint = args.get("app_hint")
-    if not isinstance(task, str) or not task.strip():
-        return {"status": "error", "summary": "task is required"}
-    if not isinstance(app_hint, str) or not app_hint.strip():
-        return {"status": "error", "summary": "app_hint is required"}
-
-    # Defense-in-depth: confirm the business belongs to the caller.
-    biz_row = await ctx.db.execute(
-        select(Business).where(Business.id == biz_id, Business.user_id == ctx.user_id)
-    )
-    if biz_row.scalar_one_or_none() is None:
-        return {"status": "error", "summary": "business not found for this user"}
+    task = _require_str(args, "task")
+    if isinstance(task, dict):
+        return task
+    app_hint = _require_str(args, "app_hint")
+    if isinstance(app_hint, dict):
+        return app_hint
 
     logged = await event_log.write(
         ctx.db,
         session_id=ctx.session_id,
-        business_id=biz_id,
+        business_id=biz,
         event_type="computer_use_requested",
         agent_name="ceo_agent",
-        payload={"task": task.strip(), "app_hint": app_hint.strip()},
+        payload={"task": task, "app_hint": app_hint},
     )
     return {
         "status": "queued",
