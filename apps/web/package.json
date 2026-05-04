@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@helm/design-tokens": "workspace:*",
-    "@sentry/nextjs": "^10.49.0",
+    "@sentry/nextjs": "^10.51.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.0",
     "@webcontainer/api": "^1.6.4",
